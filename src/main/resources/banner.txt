@@ -1,0 +1,8 @@
+${AnsiStyle.BOLD}${AnsiColor.BLUE}################################################
+${AnsiColor.RED}              ${spring.application.name}
+${AnsiColor.BLUE}INSTITUTE FOR AUTOMATION AND APPLIED INFORMATICS
+     (C) KARLSRUHE INSTITUTE OF TECHNOLOGY
+${AnsiColor.RED}     Version: @project.version@ (@maven.build.timestamp@)
+${AnsiColor.BLUE}################################################
+${AnsiColor.GREEN} :: Spring Boot${spring-boot.formatted-version} :: ${AnsiColor.GREEN}
+${AnsiStyle.NORMAL}${AnsiColor.DEFAULT}
