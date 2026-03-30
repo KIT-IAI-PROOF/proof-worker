@@ -1,0 +1,29 @@
+app:
+  name: "worker"
+spring:
+  application:
+    name: PROOF Worker
+    version: '@project.version@'
+    buildAt: '@maven.build.timestamp@'
+  main:
+    log-startup-info: false
+    lazy-initialization: false
+  output:
+    ansi:
+      enabled: ALWAYS
+  rabbitmq:
+    host: localhost
+    port: 5672
+    password: admin
+    username: admin
+proof:
+  worker:
+    process:
+      timeout: 10
+    workflow:
+      executionId: "prodExId"
+timezone: Europe/Berlin
+logging:
+  level:
+    root: info
+  config: 'classpath:logback-spring-prod.xml'
