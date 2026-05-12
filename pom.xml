@@ -9,9 +9,9 @@
         <version>3.5.8</version>
         <relativePath />
     </parent>
-    <groupId>edu.kit.iai.webis</groupId>
+    <groupId>edu.kit.iai.webis.proof</groupId>
     <artifactId>proof-worker</artifactId>
-    <version>4.5.5</version>
+    <version>1.2.0</version>
     <name>Proof Worker</name>
     <description>Proof Worker</description>
     <properties>
@@ -21,13 +21,13 @@
         <dependency>
             <groupId>edu.kit.iai.webis.proof</groupId>
             <artifactId>config-manager-client</artifactId>
-            <version>1.4.17</version>
+            <version>1.2.0</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
-            <groupId>edu.kit.iai.webis</groupId>
+            <groupId>edu.kit.iai.webis.proof</groupId>
             <artifactId>proof-utils</artifactId>
-            <version>4.4.13</version>
+            <version>1.0.0</version>
         </dependency>
         <!-- Spring starters -->
         <dependency>
@@ -150,7 +150,7 @@
                                 <image>eclipse-temurin:21-jre</image>
                             </from>
                             <to>
-                                <image>iai-artifactory.iai.kit.edu/docker-webis/proof-2/proof-worker</image>
+                                <image>ghcr.io/kit-iai-proof/proof-worker</image>
                                 <tags>
                                     <tag>${project.version}</tag>
                                     <tag>latest</tag>
@@ -169,7 +169,7 @@
                                 <image>eclipse-temurin:21-jre-alpine</image>
                             </from>
                             <to>
-                                <image>iai-artifactory.iai.kit.edu/docker-webis/proof-2/proof-worker-alpine</image>
+                                <image>ghcr.io/kit-iai-proof/proof-worker-alpine</image>
                                 <tags>
                                     <tag>${project.version}</tag>
                                     <tag>latest</tag>
@@ -188,27 +188,14 @@
     </build>
     <repositories>
         <repository>
-            <id>iai-artifactory</id>
-            <url>https://iai-artifactory.iai.kit.edu/artifactory/webis/</url>
-        </repository>
-        <repository>
-            <id>spring-release</id>
-            <name>Spring release</name>
-            <url>https://repo.spring.io/release</url>
+            <id>github-proof</id>
+            <url>https://maven.pkg.github.com/KIT-IAI-PROOF</url>
         </repository>
     </repositories>
-    <pluginRepositories>
-        <pluginRepository>
-            <id>spring-release</id>
-            <name>Spring release</name>
-            <url>https://repo.spring.io/release</url>
-        </pluginRepository>
-    </pluginRepositories>
     <distributionManagement>
         <repository>
-            <id>iai-artifactory</id>
-            <name>iai-artifactory</name>
-            <url>https://iai-artifactory.iai.kit.edu/artifactory/webis-common</url>
+            <id>github-proof</id>
+            <url>https://maven.pkg.github.com/KIT-IAI-PROOF/proof-worker</url>
         </repository>
     </distributionManagement>
 
