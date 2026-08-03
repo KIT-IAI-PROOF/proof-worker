@@ -112,7 +112,7 @@ public class ModelInputInterface implements IValueOutputWrapper{
 					}
 					else {
 						// If no start value given, add to missing required input.
-						mii.missingRequiredInputValues.add(input.getName());
+						mii.missingRequiredInputValues.add(input.getName()); 
 				    	LoggingHelper.warn().log("no start value given for required input %s for phase %s!",
 				    			input.getName(), simulationPhase);
 					}

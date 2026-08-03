@@ -220,8 +220,6 @@ public class StartupRunner implements CommandLineRunner {
     			if (this.block.getInterfaceType() == InterfaceType.STDIO) {
     				final var inputStreamWriter = new InputStreamWriter(this.pipedOutputStream, this.writerHelper);
     				mii.setWriter(inputStreamWriter);
-    				LoggingHelper.info().messageColor(Colors.ANSI_PURPLE).log("StartupRunner::  inputStreamWriter created" +
-    						" with PipedOutputStream: "/* + this.pipedOutputStream*/);
     			}
     			else if(this.block.getInterfaceType() == InterfaceType.FILE) {
     				// Using FileWriter for input only
@@ -272,8 +270,9 @@ public class StartupRunner implements CommandLineRunner {
     					this.block.getIndex(),
     					input.getName());
 
-                    this.consumerManager.instantiateReceiver(queueName, MessageType.VALUE,
-                                    new Jackson2JsonMessageConverter()));
+    			this.consumerManager.instantiateReceiver(queueName, MessageType.VALUE,
+    					new MessageListenerAdapter(new MQValueHandler(this.valueController, this.notifyController, input),
+    							new Jackson2JsonMessageConverter()));
 
     			final var inputSource = new InputQueueNameMapping(input, queueName);
     			this.valueController.addInputQueueNameMapping(inputSource);

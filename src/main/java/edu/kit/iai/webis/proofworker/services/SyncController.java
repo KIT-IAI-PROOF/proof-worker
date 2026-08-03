@@ -324,6 +324,7 @@ public class SyncController {
             "processStep:  Stored values of SimulationPhase  " + this.currentSimulationPhase + "  for Block " + this.workerConfig.getLocalBlockId() + ":");
     }
 
+
     private void writeSyncMessageToStream(SyncMessage syncMessage, ModelInputInterface modelInputInterface) {
     	modelInputInterface.resetValueCounter();
         modelInputInterface.getWriter().writeSyncMessage(syncMessage);
