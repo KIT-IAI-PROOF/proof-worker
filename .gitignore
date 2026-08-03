@@ -502,6 +502,7 @@ tramp
 # cask packages
 .cask/
 dist/
+wheels/
 
 # Flycheck
 flycheck_*.el
@@ -852,6 +853,7 @@ TSWLatexianTemp*
 **/nbproject/Package-*.bash
 build/
 nbbuild/
+wheels/
 dist/
 nbdist/
 .nb-gradle/

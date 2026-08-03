@@ -17,8 +17,8 @@ import edu.kit.iai.webis.proofutils.CommonStringTemplates;
 import edu.kit.iai.webis.proofutils.LoggingHelper;
 import edu.kit.iai.webis.proofutils.message.NotifyMessage;
 import edu.kit.iai.webis.proofutils.message.ValueMessage;
-import edu.kit.iai.webis.proofutils.model.SimulationStatus;
 import edu.kit.iai.webis.proofutils.model.SimulationPhase;
+import edu.kit.iai.webis.proofutils.model.SimulationStatus;
 import edu.kit.iai.webis.proofworker.services.NotifyController;
 import edu.kit.iai.webis.proofworker.services.ValueController;
 
@@ -60,8 +60,8 @@ public class ReaderHelper {
     				String type = typePrim.getAsString();
     				if( type.equals("NOTIFY") ) {
     					NotifyMessage notifyMessage = this.gson.fromJson(line, NotifyMessage.class);
-    					LoggingHelper.debug().log("\n ----- W --------> NOTIFY message received from Wrapper!   (Status = %s) (CP=%d) ... \n",
-    							object.get("status"), notifyMessage.getCommunicationPoint());
+    					LoggingHelper.debug().log("\n ----- W --------> NOTIFY message received from Wrapper!   (BlockStatus = %s) (CP=%d) (Phase = %s) ... \n",
+    							object.get("status"), notifyMessage.getCommunicationPoint(), notifyMessage.getSimulationPhase());
     					notifyMessage.setSimulationPhase(simulationPhase);
     					notifyMessage.setBlockStatus(SimulationStatus.valueOf(object.get("status").getAsString()));
     					LoggingHelper.trace().log("NotifyMessage: %s\n", notifyMessage );

@@ -1,9 +1,24 @@
-FROM python:3.12-slim AS python-build-test
-COPY proof-sim-core/dist/ /wheels
-RUN pip install --no-cache-dir /wheels/proof_sim_core-*.whl
+FROM iai-artifactory.iai.kit.edu/docker-webis/ci-build/java-python:latest AS python-builder
 
+# Assuming that the wheels are built and placed in dist, otherwise adjust the path accordingly
+COPY wheels /wheels/
+RUN pip install --no-cache-dir --find-links=/wheels proof-sim-core paho-mqtt
 
-FROM proof-worker:local AS final
+# Optional: remove tests & caches inside venv
+RUN find $VIRTUAL_ENV -type d -name "__pycache__" -prune -exec rm -rf {} + \
+ && find $VIRTUAL_ENV -type d -name "tests" -prune -exec rm -rf {} +
+
+# ---------- Final runtime image ----------
+FROM proof-worker:local
+
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
-COPY --from=python-build-test /usr/local/bin/python* /usr/local/bin/
-COPY --from=python-build-test /usr/local/lib /usr/local/lib
+
+# Only runtime Python (no pip, no venv tooling)
+RUN apt-get update && apt-get install -y \
+    python3.12 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* && apt-get -y autoclean
+
+COPY --from=python-builder /opt/venv /opt/venv
