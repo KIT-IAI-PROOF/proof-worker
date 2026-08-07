@@ -15,8 +15,8 @@ import edu.kit.iai.webis.proofutils.message.BaseMessage;
 import edu.kit.iai.webis.proofutils.message.IMessage;
 import edu.kit.iai.webis.proofutils.message.MessageType;
 import edu.kit.iai.webis.proofutils.message.NotifyMessage;
-import edu.kit.iai.webis.proofutils.model.SimulationStatus;
 import edu.kit.iai.webis.proofutils.model.SimulationPhase;
+import edu.kit.iai.webis.proofutils.model.SimulationStatus;
 import edu.kit.iai.webis.proofutils.service.ConsumerManager;
 import edu.kit.iai.webis.proofutils.wrapper.Block;
 import edu.kit.iai.webis.proofutils.wrapper.Workflow;
@@ -32,6 +32,7 @@ public class NotifyController {
     private final WorkerConfig workerConfig;
     private final Workflow workflow;
     private final MQNotifyProducer notifyProducer;
+    private final MonitoringPublisher monitoringPublisher;
 
     private final BaseMessage baseMessage;
     private Integer communicationPoint = 0;
@@ -50,13 +51,15 @@ public class NotifyController {
 			final Workflow workflow,
             final WorkerConfig workerConfig,
             final MQNotifyProducer notifyProducer,
-			final ConsumerManager consumerManager
+			final ConsumerManager consumerManager,
+			final MonitoringPublisher monitoringPublisher
 	) {
         this.block = block;
         this.workflow = workflow;
         this.workerConfig = workerConfig;
         this.notifyProducer = notifyProducer;
         this.consumerManager = consumerManager;
+        this.monitoringPublisher = monitoringPublisher;
         this.baseMessage = new BaseMessage();
         this.baseMessage.setLocalBlockId(this.workerConfig.getLocalBlockId());
         this.baseMessage.setGlobalBlockId(this.workerConfig.getGlobalBlockId());
@@ -83,31 +86,40 @@ public class NotifyController {
         SimulationStatus blockStatus = notifyMessage.getBlockStatus();
 		this.statusHelper.setStatus(blockStatus);
 
-        if (blockStatus == SimulationStatus.ERROR_INIT ||
-                blockStatus == SimulationStatus.ERROR_STEP ||
-                blockStatus == SimulationStatus.ERROR_FINALIZE) {
-            LoggingHelper.error().log("Notify ERROR message arrived: " + notifyMessage.getErrorText());
-			LoggingHelper.printStarBordered(blockStatus.toString() + " : " + notifyMessage.getErrorText() );
-        }
+		// Publish status update to monitoring service
+		// this.communicationPoint is used to send the notifyMessage, so use it here too.
+		this.monitoringPublisher.publishStatusUpdate(blockStatus, this.communicationPoint, notifyMessage.getErrorText());
 
-        else if (blockStatus.equals(SimulationStatus.EXECUTION_STEP_FINISHED)) {
+		switch (blockStatus) {
+			case ERROR_INIT, ERROR_STEP, ERROR_FINALIZE -> {
 
-            int sum = this.communicationPoint + this.stepSizeDefinitionHelper.getCommunicationStepSize(this.communicationPoint);
-            LoggingHelper.trace().log("BlockStatus=" + blockStatus + " BEFORE checking whether the execution is " +
-				"finished");
+				LoggingHelper.error().log("Notify ERROR message arrived: " + notifyMessage.getErrorText());
+				LoggingHelper.printStarBordered(blockStatus.toString() + " : " + notifyMessage.getErrorText() );
+			}
+			case EXECUTION_STEP_FINISHED -> {
+				int commStepSize = this.stepSizeDefinitionHelper.getCommunicationStepSize(this.communicationPoint);
+				int sum = this.communicationPoint + commStepSize;
+				LoggingHelper.trace().log("BlockStatus=" + blockStatus + " BEFORE checking whether the execution is finished");
 
-            if (sum > this.endPoint) {
-                LoggingHelper.info().log( "(CP=%d, StepSize=%d) CP+StepSize=%d > %d (endPoint): sending EXECUTION_FINISHED to Orchestrator ...",
-                		this.communicationPoint, this.communicationPoint+this.stepSizeDefinitionHelper.getCommunicationStepSize(this.communicationPoint), sum, this.endPoint );
-                blockStatus = SimulationStatus.EXECUTION_FINISHED;
-            } else {
-            	LoggingHelper.trace().log( "CommunicationPoint=%d, CommunicationStepSize=%d, sum=%d < endPoint=%d",
-            			this.communicationPoint, this.stepSizeDefinitionHelper.getCommunicationStepSize(this.communicationPoint), sum, this.endPoint);
-            }
+				if (sum > this.endPoint) {
+					LoggingHelper.info().log( "(CP=%d, StepSize=%d) CP+StepSize=%d > %d (endPoint): sending EXECUTION_FINISHED to Orchestrator ...",
+							this.communicationPoint, commStepSize, sum, this.endPoint );
+					blockStatus = SimulationStatus.EXECUTION_FINISHED;
+				} else {
+					LoggingHelper.trace().log( "CommunicationPoint=%d, CommunicationStepSize=%d, sum=%d < endPoint=%d",
+							this.communicationPoint, this.stepSizeDefinitionHelper.getCommunicationStepSize(this.communicationPoint), sum, this.endPoint);
+				}
 
-            LoggingHelper.trace().log("BlockStatus=" + blockStatus + " AFTER checking whether the execution is " +
-                    "finished");
-        }
+				LoggingHelper.trace().log("BlockStatus=" + blockStatus + " AFTER checking whether the execution is finished");
+			}
+			case VALUES_SET -> {
+				// only forward the message, if phase == INIT
+				if( notifyMessage.getSimulationPhase() != SimulationPhase.INIT ) {
+					return;
+				}
+			}
+			default -> {}
+		}
 
         final IMessage ntfyMessage = MessageBuilder
                 .init(MessageType.NOTIFY)
@@ -122,7 +134,7 @@ public class NotifyController {
 
         LoggingHelper.info()
         	.messageObject(ntfyMessage)
-            .log("ActionController: NOTIFY sent to orchestrator (Status: %s, CP=%d (local: %d)\n)", blockStatus, notifyMessage.getCommunicationPoint(), this.communicationPoint );
+            .log("NOTIFY sent to orchestrator (Status: %s, CP=%d (local: %d))\n", blockStatus, notifyMessage.getCommunicationPoint(), this.communicationPoint );
 
         if( blockStatus.equals(SimulationStatus.SHUT_DOWN )){
         	this.shutdown();
