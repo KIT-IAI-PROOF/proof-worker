@@ -13,11 +13,11 @@ import java.io.InputStreamReader;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.lang.ProcessBuilder.Redirect;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -40,10 +40,10 @@ import edu.kit.iai.webis.proofutils.helper.NameHelper;
 import edu.kit.iai.webis.proofutils.io.MQNotifyProducer;
 import edu.kit.iai.webis.proofutils.message.MessageType;
 import edu.kit.iai.webis.proofutils.message.NotifyMessage;
-import edu.kit.iai.webis.proofutils.model.SimulationStatus;
 import edu.kit.iai.webis.proofutils.model.CommunicationType;
 import edu.kit.iai.webis.proofutils.model.InterfaceType;
 import edu.kit.iai.webis.proofutils.model.SimulationPhase;
+import edu.kit.iai.webis.proofutils.model.SimulationStatus;
 import edu.kit.iai.webis.proofutils.model.SyncStrategy;
 import edu.kit.iai.webis.proofutils.service.ConsumerManager;
 import edu.kit.iai.webis.proofutils.wrapper.Block;
@@ -53,6 +53,7 @@ import edu.kit.iai.webis.proofutils.wrapper.Program;
 import edu.kit.iai.webis.proofworker.config.WorkerConfig;
 import edu.kit.iai.webis.proofworker.exception.BlockConfigException;
 import edu.kit.iai.webis.proofworker.exception.IOInterfaceSetupException;
+import edu.kit.iai.webis.proofworker.io.MQInitValueHandler;
 import edu.kit.iai.webis.proofworker.io.MQSyncHandler;
 import edu.kit.iai.webis.proofworker.io.MQValueHandler;
 import edu.kit.iai.webis.proofworker.model.InputQueueNameMapping;
@@ -219,8 +220,6 @@ public class StartupRunner implements CommandLineRunner {
     			if (this.block.getInterfaceType() == InterfaceType.STDIO) {
     				final var inputStreamWriter = new InputStreamWriter(this.pipedOutputStream, this.writerHelper);
     				mii.setWriter(inputStreamWriter);
-    				LoggingHelper.info().messageColor(Colors.ANSI_PURPLE).log("StartupRunner::  inputStreamWriter created" +
-    						" with PipedOutputStream: "/* + this.pipedOutputStream*/);
     			}
     			else if(this.block.getInterfaceType() == InterfaceType.FILE) {
     				// Using FileWriter for input only
@@ -259,45 +258,46 @@ public class StartupRunner implements CommandLineRunner {
      * Preparing stepbased input queues with consumers for VALUE messages
      */
     private void setupStepBasedInputs() {
-        // Iterate over inputs
-        if (this.block.getInputs() != null) {
-            List<Input> staticInputs = new ArrayList<>();
-            this.block.getInputs().values().forEach((final var input) -> {
-                if (input.getCommunicationType().equals(CommunicationType.STEPBASED)
-                ) {
-                	final var queueName = NameHelper.getInputQueueName(
-                            this.workerConfig.getWorkflowExecutionId(),
-                            this.workerConfig.getWorkflowUuid(),
-                            this.block.getIndex(),
-                            input.getName());
 
-                    LoggingHelper.debug().log("-> instantiating ValueReceiver:  " + queueName + ",  for phase: " + input.getSimulationPhase());
+    	Map<String, String> startValues = this.execution.getExecStartValues();
+    	Map<String, String> defaultValues = this.execution.getExecDefaultValues();
 
-                    this.consumerManager.instantiateReceiver(queueName, MessageType.VALUE,
-                            new MessageListenerAdapter(new MQValueHandler(this.valueController, input, null),
-                                    new Jackson2JsonMessageConverter()));
+    	this.block.getDynamicInputs().forEach((final var input) -> {
 
-                    final var inputSource = new InputQueueNameMapping(input, queueName);
-                    this.valueController.addInputQueueNameMapping(inputSource);
-                    LoggingHelper.debug().log("InputQueueNameMapping: " + input.getName() + " - " + queueName);
-                }
-                else if (input.getCommunicationType().equals(CommunicationType.STEPBASED_STATIC)) {
-                    staticInputs.add(input);
-                }
-            });
-            if (!staticInputs.isEmpty()) {
-            	final var staticInputsQueueName = NameHelper.getStaticInputsQueueName(this.workerConfig.getWorkflowExecutionId(),this.block);
-                LoggingHelper.debug().log("-> instantiating Static ValueReceiver:  " + staticInputsQueueName);
-                this.consumerManager.instantiateReceiver(staticInputsQueueName, MessageType.VALUE,
-                        new MessageListenerAdapter(new MQValueHandler(this.valueController, null, staticInputs),
-                                new Jackson2JsonMessageConverter()));
-                for (Input staticInput : staticInputs) {
-                    final var inputQNM = new InputQueueNameMapping(staticInput, staticInputsQueueName);
-                    this.valueController.addInputQueueNameMapping(inputQNM);
-                    LoggingHelper.debug().log("STATIC InputQueueNameMapping: " + staticInput.getName() + " - " + staticInputsQueueName);
-                }
-            }
-        }
+    			final var queueName = NameHelper.getInputQueueName(
+    					this.workerConfig.getWorkflowExecutionId(),
+    					this.workerConfig.getWorkflowUuid(),
+    					this.block.getIndex(),
+    					input.getName());
+
+    			this.consumerManager.instantiateReceiver(queueName, MessageType.VALUE,
+    					new MessageListenerAdapter(new MQValueHandler(this.valueController, this.notifyController, input),
+    							new Jackson2JsonMessageConverter()));
+
+    			final var inputSource = new InputQueueNameMapping(input, queueName);
+    			this.valueController.addInputQueueNameMapping(inputSource);
+    			LoggingHelper.debug().log("instantiating ValueReceiver for DYNAMIC Input '%s', Phase = %s, Queue name = %s",
+    					input.getName(), input.getSimulationPhase(), queueName);
+
+    			LoggingHelper.debug().log("setting start value and default value for input '%s': startValue=%s, defaultValue=%s",
+    					input.getName(), startValues.get(input.getId()), defaultValues.get(input.getId()));
+    			input.setStartValue(startValues.get(input.getId()));
+    			input.setDefaultValue(defaultValues.get(input.getId()));
+    	});
+
+        final List<Input> staticInputs = this.block.getStaticInputs();
+    	if(staticInputs.size() > 0) {
+    		final var staticInputsQueueName = NameHelper.getStaticInputsQueueName(this.workerConfig.getWorkflowExecutionId(),this.block);
+    		this.consumerManager.instantiateReceiver(staticInputsQueueName, MessageType.VALUE,
+    				new MessageListenerAdapter(new MQInitValueHandler(this.valueController, this.notifyController, staticInputs),
+    						new Jackson2JsonMessageConverter()));
+
+    		staticInputs.forEach(input -> {
+    			final var inputQNM = new InputQueueNameMapping(input, staticInputsQueueName);
+    			this.valueController.addInputQueueNameMapping(inputQNM);
+    			LoggingHelper.debug().log("InputQueueNameMapping for STATIC input '%s', Queue name = %s ", input.getName(), staticInputsQueueName);
+    		});
+    	}
     }
 
     /**
@@ -331,15 +331,23 @@ public class StartupRunner implements CommandLineRunner {
         if ( this.block.getInputs().size() > 0 || this.block.getOutputs().size() > 0) {
 
             final List<String> args = new ArrayList<String>();
-            args.add(this.program.getRuntime().getCommand());
+            if (Objects.equals(this.program.getRuntime().getCommand(), "java -jar")){
+                // For java -jar, split the command into "java" and "-jar" to avoid issues with ProcessBuilder
+                args.add("java");
+                args.add("-jar");
+            }
+            else {
+                args.add(this.program.getRuntime().getCommand());
+            }
             String fn = this.program.getEntryPointFileName();
             String wrapperFileName = fn.substring(fn.lastIndexOf(':')+1);
             String attachmentsDir = this.workerConfig.getAttachmentsDir();
             // Use the absolute model path.
             String modelPath = wrapperFileName;
-            if (!modelPath.contains(attachmentsDir))
-                // Add the attachments directory if not yet stored in the path.
+            if (!modelPath.contains(attachmentsDir)) {
+				// Add the attachments directory if not yet stored in the path.
                 modelPath = Paths.get(attachmentsDir, wrapperFileName).toString();
+			}
             args.add(modelPath);
 
             args.add("--local_block_id");
@@ -417,12 +425,33 @@ public class StartupRunner implements CommandLineRunner {
         try (BufferedReader stdOutReader = new BufferedReader(new InputStreamReader(inputStream))) {
             String line = "";
             while ((line = stdOutReader.readLine()) != null) {
-                // Just reading and printing the line is enough. We don't need to do anything else with it.
-                // As the log level is forwarded to the wrapper too, we print all output here without filtering
-                LoggingHelper.info().messageColor(Colors.ANSI_PURPLE).log("PCONSOLE: " + line);
+                // Forward Python log line as-is; setSimplifiedFormat routes it to the bare-message
+                // CONSOLE-PY/AMQP-PY appenders without adding a Java header on top.
+                // MDC.clear() inside log() automatically removes the simplifiedFormat key.
+                LoggingHelper.setSimplifiedFormat(true);
+                modelLevelLogger(line).messageColor(Colors.ANSI_CYAN).log("MODEL-CONSOLE: " + line);
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Map the Python log level embedded in a log line to the corresponding {@link LoggingHelper} builder.
+     * Python lines contain patterns like {@code [INFO]}, {@code [DEBUG]}, {@code [WARN]}, {@code [ERROR]}, {@code [CRITICAL]}.
+     * Falls back to INFO for unrecognised or non-Python lines.
+     */
+    private static LoggingHelper.LogBuilder modelLevelLogger(String line) {
+        if (line.contains("[ERROR]") || line.contains("[CRITICAL]")) {
+			return LoggingHelper.error();
+		}
+        if (line.contains("[WARN ]") || line.contains("[WARN]")) {
+			return LoggingHelper.warn();
+		}
+        // DEBUG and TRACE introduce stacktrace, which we want to avoid for Python logs,
+        // so we treat them as INFO and rely on the original Python level in the message text.
+        //if (line.contains("[DEBUG]"))                                 return LoggingHelper.debug();
+        //if (line.contains("[TRACE]"))                                 return LoggingHelper.trace();
+        return LoggingHelper.info();
     }
 }

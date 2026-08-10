@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Absolute Paths
+DIR_WORKER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DIR_SIM_CORE="$DIR_WORKER/../proof-sim-core"
+DIR_UTILS="$DIR_WORKER/../proof-utils"
+
 # Parse command line arguments
 BUILD_WORKER=false
 BUILD_SIM_CORE=false
@@ -57,7 +62,7 @@ if [ "$USE_LOCAL_WORKER" = false ] && [ "$BUILD_WORKER" = true ]; then
 fi
 
 # Check if *.wheel in proof-sim-core/dist exists, else enable building proof-sim-core to build the wheels 
-WHEEL_DIR=../proof-sim-core/dist
+WHEEL_DIR="$DIR_SIM_CORE/dist"
 if [ ! -d "$WHEEL_DIR" ]; then
   echo -e "\n== No python wheel for proof-sim-core exist ($WHEEL_DIR does not exist). Building py wheels for proof-sim-core..."
   BUILD_SIM_CORE=true
@@ -68,13 +73,15 @@ if [ "$BUILD_SIM_CORE" = true ]; then
     echo -e "\n===== Building Python package...\n"
     
     # Check if proof-sim-core directory exists
-    if [ ! -d "../proof-sim-core" ]; then
-        echo "ERROR: proof-sim-core directory not found at ../proof-sim-core"
-        echo "Expected location: $(cd .. && pwd)/proof-sim-core"
+    if [ ! -d "$DIR_SIM_CORE" ]; then
+        echo "ERROR: proof-sim-core directory not found at $DIR_SIM_CORE"
+        echo "Expected location: $DIR_SIM_CORE"
         exit 4
     fi
 
-    cd ../proof-sim-core
+    cd "$DIR_SIM_CORE"
+    # Enable this to remove old wheel and source distribution files automatically to ensure we only have the newly built ones in the dist directory
+    # rm -f dist/*.whl dist/*.tar.gz
     python3 -m build
     
     if [ $? -ne 0 ]; then
@@ -82,7 +89,48 @@ if [ "$BUILD_SIM_CORE" = true ]; then
         exit 5
     fi
 
-    cd ../proof-worker
+    cd "$DIR_WORKER"
+
+    # Get the version from setup.cfg (converts e.g. "2.3.1-dev0" to "2.3.1.dev0" for wheel filename)
+    SIM_CORE_VERSION=$(grep "^version" "$DIR_SIM_CORE/setup.cfg" | cut -d'=' -f2 | tr -d ' ')
+    # Convert hyphen to dot for PEP 440 wheel filename format (e.g., 2.3.1-dev0 -> 2.3.1.dev0)
+    SIM_CORE_VERSION_WHEEL=$(echo "$SIM_CORE_VERSION" | sed 's/-/./g')
+
+    echo -e "\n===== Version from setup.cfg: $SIM_CORE_VERSION (wheel format: $SIM_CORE_VERSION_WHEEL)\n"
+
+    # Empty the wheels directory to ensure only the correct wheel is present
+    echo -e "\n===== Clearing wheels directory...\n"
+    rm -rf wheels/*
+    mkdir -p wheels
+
+    # Copy only the wheel matching the version from setup.cfg
+    echo -e "\n===== Copying wheel for version $SIM_CORE_VERSION_WHEEL from $DIR_SIM_CORE/dist to wheels directory...\n"
+
+    # Find and copy the matching wheel file
+    WHEEL_PATTERN="proof_sim_core-${SIM_CORE_VERSION_WHEEL}-py3-none-any.whl"
+    WHEEL_COPIED=false
+    if cp "$DIR_SIM_CORE/dist/$WHEEL_PATTERN" wheels/ 2>/dev/null; then
+        echo -e "\n===== Successfully copied $WHEEL_PATTERN to wheels/\n"
+        WHEEL_COPIED=true
+    else
+        echo "WARNING: Exact wheel pattern not found. Searching for matching wheel..."
+        # Try to find any wheel with the version (in case of different platform tags)
+        for whl in "$DIR_SIM_CORE/dist"/proof_sim_core-"${SIM_CORE_VERSION_WHEEL}"*.whl; do
+            if [ -f "$whl" ]; then
+                cp "$whl" wheels/
+                echo -e "\n===== Copied $(basename "$whl") to wheels/\n"
+                WHEEL_COPIED=true
+            fi
+        done
+    fi
+
+    # Verify that at least one wheel was copied
+    if [ "$WHEEL_COPIED" = false ] || [ ! "$(ls -A wheels 2>/dev/null)" ]; then
+        echo "ERROR: No wheel files were copied to wheels/"
+        echo "Available wheels in $DIR_SIM_CORE/dist:"
+        ls -la "$DIR_SIM_CORE/dist/"*.whl 2>/dev/null || echo "No .whl files found"
+        exit 9
+    fi
 fi
 
 # Check if $BUILD_WORKER flag is provided
@@ -93,13 +141,13 @@ if [ "$BUILD_WORKER" = true ]; then
         echo -e "\n===== Installing proof-utils dependency...\n"
         
         # Check if proof-utils directory exists
-        if [ ! -d "../proof-utils" ]; then
-            echo "ERROR: proof-utils directory not found at ../proof-utils"
-            echo "Expected location: $(cd .. && pwd)/proof-utils"
+        if [ ! -d "$DIR_UTILS" ]; then
+            echo "ERROR: proof-utils directory not found at $DIR_UTILS"
+            echo "Expected location: $DIR_UTILS"
             exit 7
         fi
         
-        cd ../proof-utils
+        cd "$DIR_UTILS"
         mvn clean install -DskipTests
         
         if [ $? -ne 0 ]; then
@@ -107,13 +155,13 @@ if [ "$BUILD_WORKER" = true ]; then
             exit 8
         fi
         
-        cd ../proof-worker
+        cd "$DIR_WORKER"
     fi
 
     echo -e "\n===== Building proof-worker image...\n"
         
-    mvn clean compile jib:dockerBuild -Dimage=proof-worker:local -f pom-local.xml
-    
+    mvn clean compile jib:dockerBuild@deploy-regular -f pom-local.xml
+
     if [ $? -ne 0 ]; then
         echo "ERROR: Failed to build proof-worker image with error code '$?'"
         exit 3
@@ -129,8 +177,6 @@ else
     DOCKER_FILE="Dockerfile-from-remote"
 fi
 
-# Always execute docker build commands
-echo -e "\n===== Building py-build container...\n"
-docker build -t python-build-test -f docker/standard/$DOCKER_FILE --target python-build-test --build-arg BUILDCONTEXT=proof-worker ..
-echo -e "\n===== Building proof-standard image: $IMAGE_NAME\n"
-docker build -t "$IMAGE_NAME" -f docker/standard/$DOCKER_FILE --target final --build-arg BUILDCONTEXT=proof-worker ..
+# Always execute docker build command
+echo -e "\n===== Building proof-worker-python image: $IMAGE_NAME\n"
+docker build -t "$IMAGE_NAME" -f docker/standard/$DOCKER_FILE .

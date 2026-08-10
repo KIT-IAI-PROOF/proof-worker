@@ -13,8 +13,8 @@ import edu.kit.iai.webis.proofutils.helper.DateTimeHelper.FormatType;
 import edu.kit.iai.webis.proofutils.message.MessageType;
 import edu.kit.iai.webis.proofutils.message.NotifyMessage;
 import edu.kit.iai.webis.proofutils.message.SyncMessage;
-import edu.kit.iai.webis.proofutils.model.SimulationStatus;
 import edu.kit.iai.webis.proofutils.model.SimulationPhase;
+import edu.kit.iai.webis.proofutils.model.SimulationStatus;
 import edu.kit.iai.webis.proofworker.services.NotifyController;
 import edu.kit.iai.webis.proofworker.services.SyncController;
 import edu.kit.iai.webis.proofworker.util.StringTemplates;
@@ -45,7 +45,7 @@ public class MQSyncHandler {
      * @param syncMessage Message as TactMessage
      */
     public void handleMessage(final SyncMessage syncMessage) {
-    	LoggingHelper.info().log("===== O ====>  SYNC Message received from Orchestrator!  Phase: %s, Time=%s  \t\t  ---> CP=%d", syncMessage.getSimulationPhase(),
+    	LoggingHelper.info().log("\n===== O ====>  SYNC Message received from Orchestrator!  Phase: %s, Time=%s  \t\t  ---> CP=%d", syncMessage.getSimulationPhase(),
     			DateTimeHelper.doConversion( syncMessage.getTimeInMillis(), FormatType.TIME_HMSMS, EpochTimeScale.MILLISECOND),
     			syncMessage.getCommunicationPoint());
 

@@ -12,6 +12,7 @@ import edu.kit.iai.webis.proofutils.Colors;
 import edu.kit.iai.webis.proofutils.CommonStringTemplates;
 import edu.kit.iai.webis.proofutils.LoggingHelper;
 import edu.kit.iai.webis.proofworker.exception.TypeMismatchException;
+import edu.kit.iai.webis.proofworker.exception.ValueConfigException;
 
 /**
  * Helper class for mapping outputs to inputs
@@ -31,9 +32,14 @@ public class ValueHelper {
 
     public record Result( Object value, String typeName ) {}
 
-    public static Result getValue(final Object rawValue, final String dataType) throws TypeMismatchException{
+    public static Result getValue(final Object rawValue, final String dataType) throws TypeMismatchException, ValueConfigException {
 
-    	LoggingHelper.trace().messageColor(Colors.ANSI_RED).log("DataType: " + dataType + ",  raw value: " + rawValue);;
+    	LoggingHelper.trace().messageColor(Colors.ANSI_RED).log("DataType: " + dataType + ",  raw value: " + rawValue);
+
+    	if( rawValue == null ) {
+			throw new ValueConfigException("value not given!");
+		}
+
         switch (dataType.toLowerCase()) {
             case CommonStringTemplates.STRING, CommonStringTemplates.TYPE_FILE_NAME_VALUE -> {
                 if (rawValue instanceof String value) {
