@@ -100,7 +100,6 @@ jobs:
           python -m pip install --upgrade build
 
       - name: Build wheel
-        working-directory: python
         run: |
           cd proof-sim-core
           python -m build --wheel
