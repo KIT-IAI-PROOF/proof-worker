@@ -82,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Python repository
+      - name: Checkout proof-sim-core
         uses: actions/checkout@v4
         with:
           repository: kit-iai-proof/proof-sim-core
