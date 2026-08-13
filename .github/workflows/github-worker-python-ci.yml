@@ -74,3 +74,5 @@ jobs:
             --build-arg WORKER_IMAGE=${WORKER_IMAGE} \
             -t ghcr.io/kit-iai-proof/proof-worker-python:${WORKER_PYTHON_TAG} \
             .
+          
+          docker push ghcr.io/kit-iai-proof/proof-worker-python:${WORKER_PYTHON_TAG}
