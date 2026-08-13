@@ -157,7 +157,7 @@
                             </to>
                         </configuration>
                     </execution>
-                    <execution>
+                    <!--execution>
                         <id>deploy-alpine</id>
                         <phase>deploy</phase>
                         <goals>
@@ -174,7 +174,7 @@
                                 </tags>
                             </to>
                         </configuration>
-                    </execution>
+                    </execution-->
                 </executions>
             </plugin>
             <plugin>

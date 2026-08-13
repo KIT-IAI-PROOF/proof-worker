@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: worker base CI
 
 on:
   push:
@@ -6,9 +6,7 @@ on:
       - '**'
     tags:
       - 'v*'
-  pull_request:
-    branches:
-      - '**'
+
 env:
   GITHUB_TOKEN: ${{ secrets.PROOF_PACKAGE_CI_TOKEN }}
 
@@ -30,10 +28,10 @@ jobs:
           server-id: 'github-proof'
           server-password: GITHUB_TOKEN
 
-      - name: Build with Maven
+      - name: Compile
         run: mvn clean compile
 
-  deploy:
+  deploy-java:
     name: Deploy
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
