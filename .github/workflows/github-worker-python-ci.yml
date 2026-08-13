@@ -1,4 +1,4 @@
-name: github-worker-python-ci.yml
+name: worker python CI
 on:
   workflow_dispatch:
     inputs:
@@ -6,6 +6,9 @@ on:
         description: 'Docker image tag for proof-worker-python'
         required: true
         type: string
+
+env:
+  GITHUB_TOKEN: ${{ secrets.PROOF_PACKAGE_CI_TOKEN }}
 
 jobs:
   build-sim-core:
@@ -52,6 +55,9 @@ jobs:
         with:
           name: python-wheel
           path: proof-sim-core/dist/
+
+      - name: Login to GHCR
+        run: echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Build Java + Python Docker image
         env:
