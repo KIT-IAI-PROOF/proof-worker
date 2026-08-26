@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python library to site-packages (no venv)
-COPY wheels/*.whl /tmp/
+COPY dist/*.whl /tmp/
 RUN pip install --no-cache-dir --target /opt/venv /tmp/*.whl \
     && rm /tmp/*.whl
 
