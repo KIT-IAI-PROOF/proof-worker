@@ -6,6 +6,11 @@ on:
         description: 'Docker image tag for proof-worker-python'
         required: true
         type: string
+      worker_base_version:
+        description: 'Version of the base worker image to use'
+        required: false
+        type: string
+        default: 'latest'
 
 env:
   GITHUB_TOKEN: ${{ secrets.PROOF_PACKAGE_CI_TOKEN }}
