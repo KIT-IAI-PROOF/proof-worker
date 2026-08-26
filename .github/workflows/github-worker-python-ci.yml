@@ -21,7 +21,8 @@ jobs:
         with:
           repository: kit-iai-proof/proof-sim-core
           path: proof-sim-core
-          ref: main
+          #ref: main
+          ref: reduce_whl_size
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
