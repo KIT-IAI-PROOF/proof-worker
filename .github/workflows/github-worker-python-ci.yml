@@ -71,7 +71,7 @@ jobs:
 
       - name: Build Java + Python Docker image
         env:
-          WORKER_IMAGE: ghcr.io/kit-iai-proof/proof-worker:latest
+          WORKER_IMAGE: ghcr.io/kit-iai-proof/proof-worker:${{ inputs.worker_base_version }}
           WORKER_PYTHON_TAG: ${{ inputs.tag }}
         run: |
           docker build \

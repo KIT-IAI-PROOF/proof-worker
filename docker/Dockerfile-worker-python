@@ -1,4 +1,4 @@
-ARG WORKER_IMAGE=blablabla
+ARG WORKER_IMAGE=ghcr.io/kit-iai-proof/proof-worker:latest
 FROM python:3.12-slim AS python-builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
