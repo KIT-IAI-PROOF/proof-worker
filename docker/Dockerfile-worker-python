@@ -1,18 +1,31 @@
-ARG WORKER_IMAGE
-FROM ${WORKER_IMAGE}
-# Install Python
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        python3 \
-        python3-venv \
+ARG WORKER_IMAGE=ghcr.io/kit-iai-proof/proof-worker:latest
+FROM python:3.12-slim AS python-builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Install Python library
+# Install Python library to site-packages (no venv)
 COPY proof-sim-core/dist/*.whl /tmp/
+RUN pip install --no-cache-dir --target /opt/venv /tmp/*.whl \
+    && rm /tmp/*.whl
 
-RUN python3 -m venv /opt/venv
+# Aggressive cleanup
+RUN find /opt/venv -type d \( -name "*.dist-info" -o -name "tests" -o -name "__pycache__" -o -name "*.egg-info" \) -exec rm -rf {} + 2>/dev/null || true \
+    && find /opt/venv -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.so.debug" \) -delete \
+    && find /opt/venv -type d -name "doc*" -exec rm -rf {} + 2>/dev/null || true \
+    && find /opt/venv -type d -name "*example*" -exec rm -rf {} + 2>/dev/null || true
 
-RUN pip install --no-cache-dir /tmp/*.whl \
-    && rm -f /tmp/*.whl
+FROM ${WORKER_IMAGE}
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Single symlink for python3
+RUN ln -s /usr/bin/python3.12 /usr/bin/python3 && ln -s /usr/bin/python3.12 /usr/bin/python
+
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONPATH="/opt/venv"
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Copy site-packages from the builder stage
+COPY --from=python-builder /opt/venv /opt/venv

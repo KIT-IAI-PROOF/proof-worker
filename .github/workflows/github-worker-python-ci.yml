@@ -6,6 +6,11 @@ on:
         description: 'Docker image tag for proof-worker-python'
         required: true
         type: string
+      worker_base_version:
+        description: 'Version of the base worker image to use'
+        required: false
+        type: string
+        default: 'latest'
 
 env:
   GITHUB_TOKEN: ${{ secrets.PROOF_PACKAGE_CI_TOKEN }}
@@ -50,6 +55,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-sim-core
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: docker/Dockerfile-worker-python
+
       - name: Download Python wheel
         uses: actions/download-artifact@v4
         with:
@@ -61,7 +71,7 @@ jobs:
 
       - name: Build Java + Python Docker image
         env:
-          WORKER_IMAGE: ghcr.io/kit-iai-proof/proof-worker:latest
+          WORKER_IMAGE: ghcr.io/kit-iai-proof/proof-worker:${{ inputs.worker_base_version }}
           WORKER_PYTHON_TAG: ${{ inputs.tag }}
         run: |
           docker build \
@@ -69,3 +79,5 @@ jobs:
             --build-arg WORKER_IMAGE=${WORKER_IMAGE} \
             -t ghcr.io/kit-iai-proof/proof-worker-python:${WORKER_PYTHON_TAG} \
             .
+          
+          docker push ghcr.io/kit-iai-proof/proof-worker-python:${WORKER_PYTHON_TAG}
