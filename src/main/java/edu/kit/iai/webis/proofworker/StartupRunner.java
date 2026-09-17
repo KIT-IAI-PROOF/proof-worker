@@ -362,10 +362,17 @@ public class StartupRunner implements CommandLineRunner {
             args.add("--userdata_directory");
             args.add(this.workerConfig.getUserdataDir());
 
+            String inputs = this.mappingHelper.getInputMappingsAsJsonString();
+            String outputs = this.mappingHelper.getOutputMappingsAsJsonString();
+
+            if (Objects.equals(this.program.getRuntime().getCommand(), "java -jar")) {
+                inputs = "'" + inputs + "'";
+                outputs = "'" + outputs + "'";
+            }
             args.add("--inputs");
-            args.add(this.mappingHelper.getInputMappingsAsJsonString());
+            args.add(inputs);
             args.add("--outputs");
-            args.add(this.mappingHelper.getOutputMappingsAsJsonString());
+            args.add(outputs);
 
             if (this.execution.getInterfaceType() == InterfaceType.SOCKET) {
                 args.add("--ports");
