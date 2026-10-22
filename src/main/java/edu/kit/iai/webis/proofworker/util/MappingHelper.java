@@ -80,6 +80,7 @@ public class MappingHelper {
     		final Object inputVarValue,
     		final String inputDataType,
     		final String modelVarName
+//TODO: simplyfy this method like mapOutputValue (return single values and add them in calling method
     		)
     {
         LoggingHelper.debug().log("---->  Source (JSON): " + inputVarValue + ",  DATA TYPE: " + inputDataType);
