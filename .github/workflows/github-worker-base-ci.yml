@@ -73,5 +73,18 @@ jobs:
         run: |
           echo "IMAGE_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
+      - name: Configure Jib tags
+        shell: bash
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME,,}"
+    
+          if [[ "$TAG_NAME" == *dev* || "$TAG_NAME" == *feature* ]]; then
+            echo "JIB_EXTRA_TAG=" >> "$GITHUB_ENV"
+            echo "Dev-/Feature-Version erkannt ($GITHUB_REF_NAME): no latest tag"
+          else
+            echo "JIB_EXTRA_TAG=-Djib.to.tags=latest" >> "$GITHUB_ENV"
+            echo "Produktiv-Version erkannt ($GITHUB_REF_NAME): latest tag is set"
+          fi
+
       - name: Deploy with Jib (deploy-regular execution only)
-        run: mvn clean deploy -DskipTests -Djib.extra.tag=latest
+        run: mvn clean deploy -DskipTests ${JIB_EXTRA_TAG}
