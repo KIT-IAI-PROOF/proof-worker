@@ -1327,3 +1327,6 @@ fabric.properties
 
 # logback configuration
 #logback.xml
+
+# Eclipse project file(s)
+.project
