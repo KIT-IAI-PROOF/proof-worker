@@ -78,7 +78,7 @@ jobs:
         run: |
           TAG_NAME="${GITHUB_REF_NAME,,}"
     
-          if [[ "$TAG_NAME" == *dev* || "$TAG_NAME" == *feature* ]]; then
+          if [[ "$TAG_NAME" == *dev* || "$TAG_NAME" == *feature* || "$TAG_NAME" == *test* || "$TAG_NAME" == *local*]]; then
             echo "JIB_EXTRA_TAG=" >> "$GITHUB_ENV"
             echo "Dev-/Feature-Version erkannt ($GITHUB_REF_NAME): no latest tag"
           else
