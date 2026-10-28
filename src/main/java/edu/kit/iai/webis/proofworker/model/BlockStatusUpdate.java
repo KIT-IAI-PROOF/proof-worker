@@ -12,7 +12,7 @@ import java.io.Serializable;
 import java.time.Instant;
 
 /**
- * DTO for publishing block status updates to the monitoring service.
+ * DTO for publishing block status updates.
  * This format matches the BlockStatusUpdate.java in proof-monitoring.
  */
 public class BlockStatusUpdate implements Serializable {

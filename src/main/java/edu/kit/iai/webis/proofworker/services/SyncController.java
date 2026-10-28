@@ -39,7 +39,10 @@ public class SyncController {
 
     private StepSizeDefinitionHelper stepSizeDefinitionHelper;
     private Integer communicationPoint = 0;
-    private long processTimeOut = 4;
+    private final double inputTimeout;
+    private final double inputTimeoutMillis;
+    private final long inputValueCheckCycleMillis = 250;
+    private long startTime;
     private final BaseMessage baseMessage;
 
     private final SyncStrategy currentSyncStrategy;
@@ -64,8 +67,12 @@ public class SyncController {
 
         LoggingHelper.debug().log("Block '%s' %s for SYNC ...", block.getName(),
                 block.getSyncStrategy() == SyncStrategy.WAIT_FOR_SYNC ? "waits" : "does not wait");
-        this.processTimeOut = this.workerConfig.getProcessTimeout();
 
+        // Wait at least 0.5 second:
+        // Remark: prevent inputTimeOut=0: it would mean to expect all values to be available immediately (when processStep is called).
+        this.inputTimeout = Math.max(0.5, this.workflow.getStepBasedConfig().getInputTimeout());
+
+        this.inputTimeoutMillis = this.inputTimeout * 1000;  // [ms]
         this.notifyController = notifyController;
         this.valueController = valueController;
 
@@ -176,7 +183,7 @@ public class SyncController {
                     LoggingHelper.debug().log("The BLOCK '%s' has NO dynamic Inputs from other blocks, writing SYNC " +
                             "to STREAM (Wrapper), phase=%s", this.block.getName(), SimulationPhase.EXECUTE);
                     this.writeSyncMessageToStream(syncMessage, this.currentModelInputInterface);
-                    this.currentModelInputInterface.clearValues();
+                    this.currentModelInputInterface.clearValues();  // TODO: still necessary? Work is done with new method modelInputInterface.prepareNextStep()
                 }
 				else {
                     /*
@@ -185,7 +192,7 @@ public class SyncController {
                     * Now it depends on the simulation strategy how to continue
                     */
                     if( LoggingHelper.isLevelDebugOrTrace() ){
-                            LoggingHelper.trace()
+                            LoggingHelper.debug()
                             .log("The BLOCK '%s' has dynamic Inputs for values from other blocks AND the ModelInputInterface may have the suitable values "
                                             + "for the dynamic Inputs.   Values: %s", this.block.getName(), this.currentModelInputInterface.getValues() );
                             LoggingHelper.printHashMapContents( this.currentModelInputInterface.getValues(), System.out, "WrapperValues");
@@ -198,84 +205,84 @@ public class SyncController {
                             final NotifyMessage notifyMessage = (NotifyMessage) this.createMessage(MessageType.NOTIFY, this.currentSimulationPhase, SimulationStatus.READY);
                             this.notifyController.sendNotifyMessage(notifyMessage);
                         }
+
                         case WAIT_AND_CONTINUE, WAIT_AND_RETRY -> {
                             /**
                              * wait until all required values arrived (from other blocks)
                              */
-                            // Wait at least one cycle:
-                            // Remark: prevent processTimeOut=0: it would mean to expect all values to be available
-                            // when processStep is called.
-                            long processTimeOut = Math.max(1, this.processTimeOut); // [s]
+                            this.startTime = System.currentTimeMillis();
                             long elapsedTime = 0;
-                            long timeToWait = processTimeOut * 1000;   // [ms]
-                            long waitInterval = 500;    // [ms]
-                            int defValWaits = 15;  // number of waiting cycles before default values are used
-                            int numWaits = 0;   // number of waiting cycles
-
-                            LoggingHelper.debug().log("Time2wait: %d, ElapsedTime: %d,  WaitInterval: %d,  all needed values given: %s  ,  Block SYNC strategy: %s", timeToWait, elapsedTime, waitInterval,
+                            LoggingHelper.debug().log("inputTimeout: %.3f, StartTime: %d,  inputValueCheckCycle: %d, " +
+                                            "all needed values given: %s  ,  Block SYNC strategy: %s",
+                                    this.inputTimeoutMillis,
+                                    this.startTime,
+                                    this.inputValueCheckCycleMillis,
                             		this.currentModelInputInterface.allNeededValuesGiven(), this.block.getSyncStrategy() );
 
-                            //if( this.currentModelInputInterface.allNeededValuesGiven() ) {
-                            //	this.writeSyncMessageToStream(syncMessage, this.currentModelInputInterface);
-                            //	return;
-                            //}
-                            //else {
-                            //	while( elapsedTime < timeToWait ) {
-                                do {
-                            		if( this.currentModelInputInterface.allNeededValuesGiven() ) {
-                            			this.valueController.sendValuesToWrapper(this.currentSimulationPhase, this.communicationPoint);
-                            			this.writeSyncMessageToStream(syncMessage, this.currentModelInputInterface);
-                            			return;
-                            		}
-                            		else { // not all required values are given => wait
-                            	    	StringJoiner sj = new StringJoiner(",", " [", "] " + this.workflow.getSimulationStrategy() );
-                            	    	this.currentModelInputInterface.getMissingRequiredInputValues().forEach(s -> sj.add(s));
+                            do {
+                                if( this.currentModelInputInterface.allNeededValuesGiven() ) {
+                                    LoggingHelper.debug().log("All needed values for the dynamic inputs of the block are given, writing SYNC to STREAM (Wrapper)");
+                                    this.valueController.sendValuesToWrapper(this.currentSimulationPhase, this.communicationPoint);
+                                    this.writeSyncMessageToStream(syncMessage, this.currentModelInputInterface);
+                                    return;
+                                }
+                                else { // not all required values are given => wait
+                                    elapsedTime = System.currentTimeMillis() - this.startTime;
 
-                                        LoggingHelper.debug().log(StringTemplates.BLOCK_IS_WAITING_FOR_REQUIRED_INPUT
-                            				.formatted(this.workerConfig.getLocalBlockId(), waitInterval)
-                            				+ " [ms]:  " + sj.toString()
-                            				+ ",  elapsed time=" + elapsedTime);
-                                        try {
-                            				Thread.sleep(waitInterval);
-                            				numWaits++;
-                            			} catch (InterruptedException e) {
-                            				e.printStackTrace();
-                            				break;
-                            			}
-                            			if( numWaits > defValWaits ) {
-                            				LoggingHelper.debug().log("%d waiting cycles passed, try to use default values ... ", numWaits);
-											this.currentModelInputInterface.useDefaultValues();
-											if( this.currentModelInputInterface.allNeededValuesGiven() ) {
-										    	LoggingHelper.debug().log("Default values found and used, all values given, sending them to the wrapper ... ");
-												this.valueController.sendValuesToWrapper(this.currentSimulationPhase, this.communicationPoint);
-												this.writeSyncMessageToStream(syncMessage, this.currentModelInputInterface);
-												return;
-											}
-										}
+                                    StringJoiner sj = new StringJoiner(",", " [", "] " + this.workflow.getSimulationStrategy() );
+                                    this.currentModelInputInterface.getMissingRequiredInputValues().forEach(s -> sj.add(s));
 
-                            			elapsedTime += waitInterval;
-                            		}
-                            	} while( elapsedTime < timeToWait );
+                                    LoggingHelper.debug().log(StringTemplates.BLOCK_IS_WAITING_FOR_REQUIRED_INPUT
+                                        .formatted(this.workerConfig.getLocalBlockId(), this.inputValueCheckCycleMillis)
+                                        + " [ms]:  " + sj.toString()
+                                        + ",  elapsed time=" + elapsedTime);
+                                    try {
+                                        Thread.sleep(this.inputValueCheckCycleMillis);
+                                    } catch (InterruptedException e) {
+                                        e.printStackTrace();
+                                        this.sendErrorNotifyMesssage();
+                                        return;
+                                    }
+                                }
+                            } while( !this.isInputTimeOutExceeded(elapsedTime) );
 
-                            	if( this.workflow.getSimulationStrategy() == SimulationStrategy.WAIT_AND_CONTINUE ) {
-                            		this.sendErrorNotifyMesssage();
-                            	}
-                            	else if( this.workflow.getSimulationStrategy() == SimulationStrategy.WAIT_AND_RETRY ) {
-                            		if( this.retryMessageSent ) {
-                            			// already sent a unique RETRY back to the orchestrator
-                            			this.sendErrorNotifyMesssage();
-                            			this.retryMessageSent = false;
-                            		}
-                            		else {
-                            			LoggingHelper.debug().log("SimulationStrategy=WAIT_AND_RETRY::   Value not present for block '%s', sending RETRY to Orchestrator and waiting for SYNC ", this.block.getId());
-                            			final NotifyMessage notifyMessage = (NotifyMessage) this.createMessage(MessageType.NOTIFY, this.currentSimulationPhase, SimulationStatus.RETRY);
-                            			this.retryMessageSent = true;
-                            			this.notifyController.sendNotifyMessage(notifyMessage);
-                            		}
-                            	}
-                            //}
+                            LoggingHelper.debug().log("inputTimeout of %.3f ms exceeded while waiting for " +
+                                    "required values for the dynamic inputs of the block " +
+                                    "=> try to use default input values if available ...",
+                                    this.inputTimeoutMillis);
 
+                            // use default values
+                            this.currentModelInputInterface.useDefaultValues();
+
+                            // check whether all needed values are given?
+                            if( this.currentModelInputInterface.allNeededValuesGiven() ) {
+                                LoggingHelper.debug().log("After setting default values, ALL needed values " +
+                                        "for the dynamic inputs of the block are given, writing SYNC to STREAM (Wrapper)");
+                                this.valueController.sendValuesToWrapper(this.currentSimulationPhase, this.communicationPoint);
+                                this.writeSyncMessageToStream(syncMessage, this.currentModelInputInterface);
+                                return;
+                            }
+                            else if ( this.workflow.getSimulationStrategy() == SimulationStrategy.WAIT_AND_CONTINUE ) {
+                                LoggingHelper.debug().log("After setting default values, NOT ALL " +
+                                        "required values for the dynamic inputs of the block are given" +
+                                        "=> sending NotifyMessage ERROR message to Orchestrator ...");
+                                this.sendErrorNotifyMesssage();
+                            }
+                            else if( this.workflow.getSimulationStrategy() == SimulationStrategy.WAIT_AND_RETRY ) {
+                                if( this.retryMessageSent ) {
+                                    // already sent a unique RETRY back to the orchestrator
+                                    this.sendErrorNotifyMesssage();
+                                    this.retryMessageSent = false;
+                                }
+                                else {
+                                    LoggingHelper.debug().log("SimulationStrategy=WAIT_AND_RETRY::   Value not present for block '%s', sending RETRY to Orchestrator and waiting for SYNC ", this.block.getId());
+                                    final NotifyMessage notifyMessage = (NotifyMessage) this.createMessage(MessageType.NOTIFY, this.currentSimulationPhase, SimulationStatus.RETRY);
+                                    this.retryMessageSent = true;
+                                    this.notifyController.sendNotifyMessage(notifyMessage);
+                                }
+                            }
 	                    }
+
                         case LATEST -> {
                             LoggingHelper.info()
                             .log(StringTemplates.VALUE_FOR_IOINTERFACE_NOT_PRESENT_USING_LATEST_VALUE.formatted(this.block.getId()) + ", SimulationStrategy=LATEST" );
@@ -290,6 +297,13 @@ public class SyncController {
                                 this.notifyController.sendNotifyMessage(notifyMessage);
                             }
                         }
+//                        case WAIT_AND_RETRY -> {  // TODO: implement => see above
+//                            LoggingHelper.info()
+//                            .log("SimulationStrategy=WAIT_AND_RETRY::   Value not present for block '%s', waiting for SYNC from Orchestrator", this.block.getId());
+//
+//                            final NotifyMessage notifyMessage = (NotifyMessage) this.createMessage(MessageType.NOTIFY, this.currentSimulationPhase, SimulationStatus.READY);
+//                            this.notifyController.sendNotifyMessage(notifyMessage);
+//                        }
 
                         default ->
                                 throw new RuntimeException("Unexpected value: " + this.workflow.getSimulationStrategy());
@@ -311,7 +325,7 @@ public class SyncController {
                 final SyncMessage newSyncMessage = (SyncMessage) this.createMessage(MessageType.SYNC,
                         this.currentSimulationPhase, null);
                 final ModelInputInterface shutdownMii =
-                        ModelInputInterface.getModelInputInterface(SimulationPhase.EXECUTE);
+                        ModelInputInterface.getModelInputInterface(SimulationPhase.EXECUTE); /// TODO ERROR => SimulationPhase.SHUTDOWN
                 LoggingHelper.debug().log("sending SHUTDOWN Snyc Message to Wrapper");
 
                 this.writeSyncMessageToStream(newSyncMessage, shutdownMii);
@@ -336,7 +350,7 @@ public class SyncController {
     	StringJoiner sj = new StringJoiner(",", "Not each required Input has its VALUE during timeout (", ")  Simulation Strategy: " + this.workflow.getSimulationStrategy() );
     	this.currentModelInputInterface.getMissingRequiredInputValues().forEach(s -> sj.add(s));
 
-    	LoggingHelper.debug().log(sj.toString());
+    	LoggingHelper.error().log(sj.toString());
 		final NotifyMessage notifyMessage = (NotifyMessage) this.createMessage(MessageType.NOTIFY, this.currentSimulationPhase, SimulationStatus.ERROR_STEP);
 		notifyMessage.setErrorText(sj.toString());
 		this.notifyController.sendNotifyMessage(notifyMessage);
@@ -351,4 +365,14 @@ public class SyncController {
                 .build();
     }
 
+    /**
+     * Check if the timeout has been exceeded.
+     * @return true if timeout exceeded, false otherwise
+     */
+    private boolean isInputTimeOutExceeded(long elapsedTime) {
+        if (this.inputTimeoutMillis <= 0) {
+            return false;  // No timeout set
+        }
+        return elapsedTime >= this.inputTimeoutMillis;
+    }
 }

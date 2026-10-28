@@ -17,8 +17,10 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 
 /**
- * Service for publishing block status updates to the monitoring service via RabbitMQ.
- * This allows the monitoring UI to display real-time execution progress.
+ * Service for publishing block status updates to the execution-specific status queue.
+ * Each execution has its own stream queue named: "status.execution.<execution-id>"
+ * 
+ * Status updates are sent asynchronously and failures do not affect workflow execution.
  */
 @Service
 public class MonitoringPublisher {
@@ -26,14 +28,8 @@ public class MonitoringPublisher {
     private final RabbitTemplate rabbitTemplate;
     private final WorkerConfig workerConfig;
 
-    @Value("${proof.monitoring.exchange.name:execution-status-exchange}")
-    private String monitoringExchangeName;
-
-    @Value("${proof.monitoring.routing.key:execution.status.update}")
-    private String monitoringRoutingKey;
-
-    @Value("${proof.monitoring.enabled:true}")
-    private boolean monitoringEnabled;
+    @Value("${proof.status-updates.enabled:true}")
+    private boolean statusUpdatesEnabled;
 
     public MonitoringPublisher(RabbitTemplate rabbitTemplate, WorkerConfig workerConfig) {
         this.rabbitTemplate = rabbitTemplate;
@@ -41,7 +37,7 @@ public class MonitoringPublisher {
     }
 
     /**
-     * Publishes a block status update to the monitoring queue.
+     * Publishes a block status update to the execution-specific status queue.
      * The update is sent asynchronously and failures do not affect workflow execution.
      *
      * @param status the new simulation status
@@ -49,13 +45,13 @@ public class MonitoringPublisher {
      * @param errorMessage optional error message (can be null)
      */
     public void publishStatusUpdate(SimulationStatus status, Integer cp, String errorMessage) {
-        if (!monitoringEnabled) {
-            LoggingHelper.trace().log("Monitoring is disabled, skipping status update");
+        if (!statusUpdatesEnabled) {
+            LoggingHelper.trace().log("Status updates are disabled, skipping status update");
             return;
         }
 
         if (status == null) {
-            LoggingHelper.warn().log("Cannot publish null status to monitoring");
+            LoggingHelper.warn().log("Cannot publish null status");
             return;
         }
 
@@ -69,17 +65,28 @@ public class MonitoringPublisher {
                     .timestamp(Instant.now())
                     .build();
 
-            rabbitTemplate.convertAndSend(monitoringExchangeName, monitoringRoutingKey, update);
+            String queueName = getStatusQueueName(workerConfig.getWorkflowExecutionId());
+            rabbitTemplate.convertAndSend(queueName, update);
 
             LoggingHelper.debug().log(
-                    "Published status update to monitoring: exchange=%s, routingKey=%s, blockId=%s, status=%s",
-                    monitoringExchangeName, monitoringRoutingKey, update.getBlockId(), update.getStatus()
+                    "Published status update to queue: queue=%s, blockId=%s, status=%s",
+                    queueName, update.getBlockId(), update.getStatus()
             );
         } catch (Exception e) {
             LoggingHelper.error().log(
-                    "Failed to publish status update to monitoring: %s",
+                    "Failed to publish status update: %s",
                     e.getMessage()
             );
         }
+    }
+
+    /**
+     * Get the status queue name for the given execution.
+     * 
+     * @param executionId the execution ID
+     * @return the queue name: "status.execution.<execution-id>"
+     */
+    private static String getStatusQueueName(String executionId) {
+        return "status.execution." + executionId;
     }
 }
