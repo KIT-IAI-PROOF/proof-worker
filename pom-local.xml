@@ -6,16 +6,17 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.8</version>
+        <version>3.5.16</version>
         <relativePath />
     </parent>
     <groupId>edu.kit.iai.webis.proof</groupId>
     <artifactId>proof-worker</artifactId>
-    <version>1.4.0-dev0-local</version>
+    <version>1.4.0-dev1-local</version>
     <name>Proof Worker</name>
     <description>Proof Worker</description>
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
     <dependencies>
         <dependency>
@@ -35,10 +36,6 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-configuration-processor</artifactId>
         </dependency>
         <dependency>
@@ -54,31 +51,17 @@
         <dependency>
             <groupId>org.springframework.amqp</groupId>
             <artifactId>spring-rabbit</artifactId>
+            <version>3.2.12</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
-            <version>2.13.2</version>
+            <version>2.14.0</version>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20250517</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>2.21.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-            <version>3.20.0</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>33.5.0-jre</version>
+            <version>20260814</version>
         </dependency>
     </dependencies>
     <build>
@@ -105,7 +88,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
-                <version>3.4.2</version>
+                <version>3.5.1</version>
                 <configuration>
                     <archive>
                         <manifest>
@@ -118,7 +101,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-deploy-plugin</artifactId>
-                <version>3.1.4</version>
+                <version>3.2.0</version>
                 <configuration>
                     <skip>true</skip>
                 </configuration>
@@ -126,7 +109,7 @@
             <plugin>
                 <groupId>com.google.cloud.tools</groupId>
                 <artifactId>jib-maven-plugin</artifactId>
-                <version>3.4.6</version>
+                <version>3.5.2</version>
                 <configuration>
                     <container>
                         <creationTime>USE_CURRENT_TIMESTAMP</creationTime>
@@ -144,23 +127,59 @@
                                 <image>eclipse-temurin:21-jre-noble</image>
                             </from>
                             <to>
-                                <image>proof-worker:local</image>
+                                <image>proof-worker:${project.version}</image>
                             </to>
                         </configuration>
                     </execution>
-                    <execution>
+                    <!--execution>
                         <id>deploy-alpine</id>
                         <phase>deploy</phase>
                         <goals>
-                            <goal>dockerBuild</goal>
+                            <goal>build</goal>
                         </goals>
                         <configuration>
                             <from>
                                 <image>eclipse-temurin:21-jre-alpine</image>
                             </from>
                             <to>
-                                <image>proof-worker:local-alpine</image>
+                                <image>ghcr.io/kit-iai-proof/proof-worker-alpine:${project.version}</image>
+                                <tags>
+                                    <tag>${jib.extra.tag}</tag>
+                                </tags>
                             </to>
+                        </configuration>
+                    </execution-->
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.2</version>
+                <executions>
+                    <!-- For non-release versions (not exactly x.y.z): keep extra tag as version (no-op duplicate) -->
+                    <execution>
+                        <id>set-extra-tag-dev</id>
+                        <phase>validate</phase>
+                        <goals><goal>regex-property</goal></goals>
+                        <configuration>
+                            <name>jib.extra.tag</name>
+                            <value>${project.version}</value>
+                            <regex>^(?!\d+\.\d+\.\d+$).*$</regex>
+                            <replacement>${project.version}</replacement>
+                            <failIfNoMatch>false</failIfNoMatch>
+                        </configuration>
+                    </execution>
+                    <!-- For release versions (exactly x.y.z): set extra tag to latest -->
+                    <execution>
+                        <id>set-extra-tag-release</id>
+                        <phase>validate</phase>
+                        <goals><goal>regex-property</goal></goals>
+                        <configuration>
+                            <name>jib.extra.tag</name>
+                            <value>${project.version}</value>
+                            <regex>^\d+\.\d+\.\d+$</regex>
+                            <replacement>latest</replacement>
+                            <failIfNoMatch>false</failIfNoMatch>
                         </configuration>
                     </execution>
                 </executions>
@@ -175,7 +194,7 @@
     <repositories>
         <repository>
             <id>github-proof</id>
-            <url>https://maven.pkg.github.com/KIT-IAI-PROOF</url>
+            <url>https://maven.pkg.github.com/KIT-IAI-PROOF/proof-maven-packages</url>
         </repository>
     </repositories>
     <pluginRepositories>
@@ -188,7 +207,7 @@
     <distributionManagement>
         <repository>
             <id>github-proof</id>
-            <url>https://maven.pkg.github.com/KIT-IAI-PROOF/proof-worker</url>
+            <url>https://maven.pkg.github.com/KIT-IAI-PROOF/proof-maven-packages</url>
         </repository>
     </distributionManagement>
 
