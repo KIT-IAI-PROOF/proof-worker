@@ -8,17 +8,17 @@ package edu.kit.iai.webis.proofworker.util;
 import edu.kit.iai.webis.proofutils.model.SimulationStatus;
 
 /**
- * Utility class for mapping internal SimulationStatus to monitoring service status strings.
+ * Utility class for mapping internal SimulationStatus to monitoring status strings.
  */
 public class StatusMapper {
 
     /**
-     * Maps internal SimulationStatus to monitoring service status strings.
+     * Maps internal SimulationStatus to monitoring status strings.
      * Both SimulationStatus and ESimulationStatus enums share most values,
      * so direct name mapping works.
      *
      * @param status the internal SimulationStatus
-     * @return the status name as string for the monitoring service
+     * @return the status name as string for the monitoring
      */
     public static String toMonitoringStatus(SimulationStatus status) {
         if (status == null) {

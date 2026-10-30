@@ -43,6 +43,7 @@ public class StringTemplates {
             "Value for IOInterface not present in the current step, retry on next step. Block: '%s'";
     public static final String VALUE_FOR_IOINTERFACE_NOT_PRESENT_USING_LATEST_VALUE =
             "Value for IOInterface not present in the current step, using latest value. Block: '%s'";
-    public static final String BLOCK_IS_WAITING_FOR_REQUIRED_INPUT = "Block %s is still waiting for required input. Waiting for %d seconds";
+    public static final String BLOCK_IS_WAITING_FOR_REQUIRED_INPUT = "Block %s is still waiting for required input. " +
+            "Waiting for %d milliseconds";
 
 }
