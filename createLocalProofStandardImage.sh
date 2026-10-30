@@ -5,6 +5,10 @@ DIR_WORKER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIR_SIM_CORE="$DIR_WORKER/../proof-sim-core"
 DIR_UTILS="$DIR_WORKER/../proof-utils"
 
+# Fix Paths; paths dependent of sim-core project and Dockerfile setup
+SIM_WHEEL_DIR="$DIR_SIM_CORE/dist"
+WORKER_WHEEL_DIR="proof-sim-core/dist/"
+
 # Parse command line arguments
 BUILD_WORKER=false
 BUILD_SIM_CORE=false
@@ -62,9 +66,8 @@ if [ "$USE_LOCAL_WORKER" = false ] && [ "$BUILD_WORKER" = true ]; then
 fi
 
 # Check if *.wheel in proof-sim-core/dist exists, else enable building proof-sim-core to build the wheels 
-WHEEL_DIR="$DIR_SIM_CORE/dist"
-if [ ! -d "$WHEEL_DIR" ]; then
-  echo -e "\n== No python wheel for proof-sim-core exist ($WHEEL_DIR does not exist). Building py wheels for proof-sim-core..."
+if [ ! -d "$WORKER_WHEEL_DIR" ]; then
+  echo -e "\n== No python wheel for proof-sim-core exists in worker directory ($WORKER_WHEEL_DIR does not exist). Building py wheels for proof-sim-core..."
   BUILD_SIM_CORE=true
 fi
 
@@ -100,35 +103,35 @@ if [ "$BUILD_SIM_CORE" = true ]; then
 
     # Empty the wheels directory to ensure only the correct wheel is present
     echo -e "\n===== Clearing wheels directory...\n"
-    rm -rf wheels/*
-    mkdir -p wheels
+    rm -rf "$WORKER_WHEEL_DIR"/*
+    mkdir -p "$WORKER_WHEEL_DIR"
 
     # Copy only the wheel matching the version from setup.cfg
-    echo -e "\n===== Copying wheel for version $SIM_CORE_VERSION_WHEEL from $DIR_SIM_CORE/dist to wheels directory...\n"
+    echo -e "\n===== Copying wheel for version $SIM_CORE_VERSION_WHEEL from $SIM_WHEEL_DIR to wheels directory...\n"
 
     # Find and copy the matching wheel file
     WHEEL_PATTERN="proof_sim_core-${SIM_CORE_VERSION_WHEEL}-py3-none-any.whl"
     WHEEL_COPIED=false
-    if cp "$DIR_SIM_CORE/dist/$WHEEL_PATTERN" wheels/ 2>/dev/null; then
-        echo -e "\n===== Successfully copied $WHEEL_PATTERN to wheels/\n"
+    if cp "$SIM_WHEEL_DIR/$WHEEL_PATTERN" "$WORKER_WHEEL_DIR" 2>/dev/null; then
+        echo -e "\n===== Successfully copied $WHEEL_PATTERN to $WORKER_WHEEL_DIR\n"
         WHEEL_COPIED=true
     else
         echo "WARNING: Exact wheel pattern not found. Searching for matching wheel..."
         # Try to find any wheel with the version (in case of different platform tags)
-        for whl in "$DIR_SIM_CORE/dist"/proof_sim_core-"${SIM_CORE_VERSION_WHEEL}"*.whl; do
+        for whl in "$SIM_WHEEL_DIR"/proof_sim_core-"${SIM_CORE_VERSION_WHEEL}"*.whl; do
             if [ -f "$whl" ]; then
-                cp "$whl" wheels/
-                echo -e "\n===== Copied $(basename "$whl") to wheels/\n"
+                cp "$whl" "$WORKER_WHEEL_DIR"
+                echo -e "\n===== Copied $(basename "$whl") to $WORKER_WHEEL_DIR\n"
                 WHEEL_COPIED=true
             fi
         done
     fi
 
     # Verify that at least one wheel was copied
-    if [ "$WHEEL_COPIED" = false ] || [ ! "$(ls -A wheels 2>/dev/null)" ]; then
-        echo "ERROR: No wheel files were copied to wheels/"
-        echo "Available wheels in $DIR_SIM_CORE/dist:"
-        ls -la "$DIR_SIM_CORE/dist/"*.whl 2>/dev/null || echo "No .whl files found"
+    if [ "$WHEEL_COPIED" = false ] || [ ! "$(ls -A "$WORKER_WHEEL_DIR" 2>/dev/null)" ]; then
+        echo "ERROR: No wheel files were copied to $WORKER_WHEEL_DIR"
+        echo "Available wheels in $SIM_WHEEL_DIR:"
+        ls -la "$SIM_WHEEL_DIR"*.whl 2>/dev/null || echo "No .whl files found"
         exit 9
     fi
 fi
