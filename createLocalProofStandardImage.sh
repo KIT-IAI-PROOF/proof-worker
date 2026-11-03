@@ -174,12 +174,13 @@ fi
 # Determine which worker image to use
 if [ "$USE_LOCAL_WORKER" = true ]; then
     echo -e "\n=== Using local proof-worker:local image"
-    DOCKER_FILE="Dockerfile-from-local"
+    DOCKER_FILE="standard/Dockerfile-from-local"
 else
     echo -e "\n=== Using remote proof-worker:latest from iai-artifactory"
-    DOCKER_FILE="Dockerfile-from-remote"
+    DOCKER_FILE="standard/Dockerfile-from-remote"
 fi
+DOCKER_FILE="Dockerfile-worker-python"
 
 # Always execute docker build command
 echo -e "\n===== Building proof-worker-python image: $IMAGE_NAME\n"
-docker build -t "$IMAGE_NAME" -f docker/standard/$DOCKER_FILE .
+docker build -t "$IMAGE_NAME" -f docker/$DOCKER_FILE .
