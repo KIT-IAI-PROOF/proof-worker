@@ -19,7 +19,6 @@ import edu.kit.iai.webis.proofutils.model.SimulationPhase;
 import edu.kit.iai.webis.proofutils.model.SimulationStatus;
 import edu.kit.iai.webis.proofutils.service.ConsumerManager;
 import edu.kit.iai.webis.proofutils.wrapper.Block;
-import edu.kit.iai.webis.proofutils.wrapper.Workflow;
 import edu.kit.iai.webis.proofworker.config.WorkerConfig;
 import edu.kit.iai.webis.proofworker.util.ReaderHelper;
 import edu.kit.iai.webis.proofworker.util.StatusHelper;
@@ -48,14 +47,12 @@ public class NotifyController {
 
 	public NotifyController(
 			final Block block,
-			final Workflow workflow,
             final WorkerConfig workerConfig,
             final MQNotifyProducer notifyProducer,
 			final ConsumerManager consumerManager,
 			final MonitoringPublisher monitoringPublisher
 	) {
         this.block = block;
-        this.workflow = workflow;
         this.workerConfig = workerConfig;
         this.notifyProducer = notifyProducer;
         this.consumerManager = consumerManager;
@@ -92,7 +89,7 @@ public class NotifyController {
 
 		switch (blockStatus) {
 			case ERROR_INIT, ERROR_STEP, ERROR_FINALIZE -> {
-
+	
 				LoggingHelper.error().log("Notify ERROR message arrived: " + notifyMessage.getErrorText());
 				LoggingHelper.printStarBordered(blockStatus.toString() + " : " + notifyMessage.getErrorText() );
 			}
@@ -100,16 +97,15 @@ public class NotifyController {
 				int commStepSize = this.stepSizeDefinitionHelper.getCommunicationStepSize(this.communicationPoint);
 				int sum = this.communicationPoint + commStepSize;
 				LoggingHelper.trace().log("BlockStatus=" + blockStatus + " BEFORE checking whether the execution is finished");
-
-				if (sum > this.endPoint) {
-					LoggingHelper.info().log( "(CP=%d, StepSize=%d) CP+StepSize=%d > %d (endPoint): sending EXECUTION_FINISHED to Orchestrator ...",
+	
+				if (sum >= this.endPoint) {
+					LoggingHelper.debug().log( "(CP=%d, StepSize=%d) CP+StepSize=%d > %d (endPoint): sending EXECUTION_FINISHED to Orchestrator ...",
 							this.communicationPoint, commStepSize, sum, this.endPoint );
 					blockStatus = SimulationStatus.EXECUTION_FINISHED;
 				} else {
 					LoggingHelper.trace().log( "CommunicationPoint=%d, CommunicationStepSize=%d, sum=%d < endPoint=%d",
-							this.communicationPoint, this.stepSizeDefinitionHelper.getCommunicationStepSize(this.communicationPoint), sum, this.endPoint);
+							this.communicationPoint, commStepSize, sum, this.endPoint );
 				}
-
 				LoggingHelper.trace().log("BlockStatus=" + blockStatus + " AFTER checking whether the execution is finished");
 			}
 			case VALUES_SET -> {
