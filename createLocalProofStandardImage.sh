@@ -1,4 +1,6 @@
 #!/bin/bash
+# Fail fast on any error, unset variable, or failed pipe stage.
+set -euo pipefail
 
 # Absolute Paths
 DIR_WORKER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -108,10 +110,9 @@ if [ "$BUILD_SIM_CORE" = true ]; then
     cd "$DIR_SIM_CORE"
     # Enable this to remove old wheel and source distribution files automatically to ensure we only have the newly built ones in the dist directory
     # rm -f dist/*.whl dist/*.tar.gz
-    python3 -m build
-    
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to build Python package with error code '$?'"
+    if ! python3 -m build; then
+        code=$?
+        echo "ERROR: Failed to build Python package with error code '$code'"
         exit 5
     fi
 
@@ -174,10 +175,9 @@ if [ "$BUILD_WORKER" = true ]; then
         fi
         
         cd "$DIR_UTILS"
-        mvn clean install -DskipTests
-        
-        if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to install proof-utils with error code '$?'"
+        if ! mvn clean install -DskipTests; then
+            code=$?
+            echo "ERROR: Failed to install proof-utils with error code '$code'"
             exit 8
         fi
         
@@ -185,11 +185,12 @@ if [ "$BUILD_WORKER" = true ]; then
     fi
 
     echo -e "\n===== Building proof-worker image...\n"
-        
-    mvn clean compile jib:dockerBuild@deploy-regular -f pom-local.xml
 
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to build proof-worker image with error code '$?'"
+    # NOTE: `compile` is required here — invoking jib:dockerBuild@deploy-regular directly
+    # does NOT run the compile phase automatically, so we must compile fresh classes first.
+    if ! mvn clean compile jib:dockerBuild@deploy-regular -f pom-local.xml; then
+        code=$?
+        echo "ERROR: Failed to build proof-worker image with error code '$code'"
         exit 3
     fi
 fi
