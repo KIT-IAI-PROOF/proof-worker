@@ -19,7 +19,7 @@ WORKER_VERSION=$(grep -A1 '<artifactId>proof-worker</artifactId>' "$DIR_WORKER/p
 BUILD_WORKER=false
 BUILD_SIM_CORE=false
 BUILD_UTILS=false
-IMAGE_NAME="proof-worker-python:$WORKER_VERSION-local"
+IMAGE_NAME="proof-worker-python:$WORKER_VERSION"
 DOCKER_FILE="Dockerfile-worker-python"
 
 USE_LOCAL_WORKER=true       # false only when -r (remote base) is used
