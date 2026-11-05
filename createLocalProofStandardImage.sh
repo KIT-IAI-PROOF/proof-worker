@@ -18,6 +18,10 @@ BUILD_WORKER=false
 BUILD_SIM_CORE=false
 BUILD_UTILS=false
 IMAGE_NAME="proof-worker-python:$WORKER_VERSION-local"
+DOCKER_FILE="Dockerfile-worker-python"
+
+USE_LOCAL_WORKER=true       # false only when -r (remote base) is used
+BASE_IMAGE=""               # optional image (remote or local)
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -37,19 +41,34 @@ while [[ $# -gt 0 ]]; do
             IMAGE_NAME="$2"
             shift 2
             ;;
+        --base-image|-b)
+            USE_LOCAL_WORKER=true
+            if [[ $# -gt 1 && "$2" != -* ]]; then
+                BASE_IMAGE="$2"
+                shift 2
+            else
+                shift
+            fi
+            ;;
         --use-remote|-r)
             USE_LOCAL_WORKER=false
-            shift
+            if [[ $# -gt 1 && "$2" != -* ]]; then
+                BASE_IMAGE="$2"
+                shift 2
+            else
+                shift
+            fi
             ;;
         *)
             echo "Unknown option: $1"
-            echo -e "Usage: $0 [--worker|-w] [--sim-core|-s] [--utils|-u] [--image|-i IMAGE_NAME] [--use-remote|-r]"
+            echo -e "Usage: $0 [--worker|-w] [--sim-core|-s] [--utils|-u] [--image|-i IMAGE_NAME] [--base-image|-b [IMG]] [--use-remote|-r [IMG]]"
             echo -e "\nOptions:"
-            echo -e "  --worker, -w          Build image based on proof-worker changes"
-            echo -e "  --sim-core, -s        Build image based on proof-sim-core Python package changes"
-            echo -e "  --utils, -u           Build and install proof-utils before building proof-worker"
-            echo -e "  --image, -i NAME      Set final image name and tag (default: proof-worker-python:local)"
-            echo -e "  --use-remote, -r      Use remote proof-worker from iai-artifactory instead of locally built on"
+            echo -e "  --worker, -w             Build the (local) proof-worker base image from source"
+            echo -e "  --sim-core, -s           Build image based on proof-sim-core Python package changes"
+            echo -e "  --utils, -u              Build and install proof-utils before building proof-worker"
+            echo -e "  --image, -i NAME         Set final image name and tag (default: proof-worker-python:<version>-local)"
+            echo -e "  --base-image, -b [IMG]   Use LOCAL base image <IMG> (default: proof-worker:<version> from pom-local.xml)"
+            echo -e "  --use-remote, -r [IMG]   Use REMOTE base image ghcr.io/kit-iai-proof/<IMG> (default: proof-worker:latest)"
             exit 1
             ;;
     esac
@@ -61,10 +80,11 @@ if [ "$BUILD_WORKER" = false ] && [ "$BUILD_SIM_CORE" = false ]; then
     exit 2
 fi
 
-# Check that --use-remote is only used with --sim-core
+# A remote base image (-r) is only meaningful together with --sim-core,
+# never together with --worker (which builds the local worker).
 if [ "$USE_LOCAL_WORKER" = false ] && [ "$BUILD_WORKER" = true ]; then
     echo "ERROR: --use-remote/-r can only be used with --sim-core/-s, not with --worker/-w!"
-    echo "Building the worker locally (--worker/-w) while using a remote worker makes no sense."
+    echo "Building the worker locally (--worker/-w) while using a remote base makes no sense."
     exit 6
 fi
 
@@ -174,16 +194,18 @@ if [ "$BUILD_WORKER" = true ]; then
     fi
 fi
 
-# Determine which worker image to use
-if [ "$USE_LOCAL_WORKER" = true ]; then
-    echo -e "\n=== Using local proof-worker:local image"
-    DOCKER_FILE="standard/Dockerfile-from-local"
+# Resolve the base worker image injected as the Dockerfile's WORKER_IMAGE arg.
+BASE_IMG_PATH=""
+if [ "$USE_LOCAL_WORKER" = "false" ]; then
+    BASE_IMG_PATH="ghcr.io/kit-iai-proof"
+    : "${BASE_IMAGE:=proof-worker:latest}"
 else
-    echo -e "\n=== Using remote proof-worker:latest from iai-artifactory"
-    DOCKER_FILE="standard/Dockerfile-from-remote"
+    : "${BASE_IMAGE:=proof-worker:${WORKER_VERSION}}"
 fi
-DOCKER_FILE="Dockerfile-worker-python"
+WORKER_BASE_IMAGE="$BASE_IMG_PATH/$BASE_IMAGE"
+
+echo -e "\n=== Using base image: $WORKER_BASE_IMAGE"
 
 # Always execute docker build command
-echo -e "\n===== Building proof-worker-python image: $IMAGE_NAME\n"
-docker build -t "$IMAGE_NAME" -f docker/$DOCKER_FILE .
+echo -e "\n===== Building proof-worker-python image: $IMAGE_NAME from base image: $WORKER_BASE_IMAGE"
+docker build -t "$IMAGE_NAME" --build-arg WORKER_IMAGE="$WORKER_BASE_IMAGE" -f docker/$DOCKER_FILE .
