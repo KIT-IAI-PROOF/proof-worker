@@ -76,18 +76,23 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Check that at least one building option is chosen
-if [ "$BUILD_WORKER" = false ] && [ "$BUILD_SIM_CORE" = false ]; then
-    echo "ERROR: Either --worker/-w or --sim-core/-s needs to be provided!"
+# Check that at least one building (or base-image selecting) option is chosen
+BASE_IMAGE_SPECIFIED=false
+if [ -n "$BASE_IMAGE" ]; then
+    BASE_IMAGE_SPECIFIED=true
+fi
+if [ "$BUILD_WORKER" = false ] && [ "$BUILD_SIM_CORE" = false ] && [ "$BASE_IMAGE_SPECIFIED" = false ]; then
+    echo "ERROR: Either --worker/-w, --sim-core/-s, --base-image/-b, or --use-remote/-r needs to be provided!"
     exit 2
 fi
 
-# A remote base image (-r) is only meaningful together with --sim-core,
-# never together with --worker (which builds the local worker).
-if [ "$USE_LOCAL_WORKER" = false ] && [ "$BUILD_WORKER" = true ]; then
-    echo "ERROR: --use-remote/-r can only be used with --sim-core/-s, not with --worker/-w!"
-    echo "Building the worker locally (--worker/-w) while using a remote base makes no sense."
-    exit 6
+# --worker/-w always builds its own local proof-worker image and uses it as the
+# base, so any --base-image/-b or --use-remote/-r override is meaningless here.
+if [ "$BUILD_WORKER" = true ] && { [ "$USE_LOCAL_WORKER" = false ] || [ "$BASE_IMAGE_SPECIFIED" = true ]; }; then
+    echo "NOTE: --worker/-w builds proof-worker locally and uses it as the base image;"
+    echo "      ignoring the --base-image/-b or --use-remote/-r image override."
+    USE_LOCAL_WORKER=true
+    BASE_IMAGE=""
 fi
 
 # Check if *.wheel in proof-sim-core/dist exists, else enable building proof-sim-core to build the wheels 
@@ -208,5 +213,5 @@ WORKER_BASE_IMAGE="$BASE_IMG_PATH$BASE_IMAGE"
 echo -e "\n=== Using base image: $WORKER_BASE_IMAGE"
 
 # Always execute docker build command
-echo -e "\n===== Building proof-worker-python image: $IMAGE_NAME from base image: $WORKER_BASE_IMAGE"
+echo -e "\n===== Building image:\nproof-worker-python: '$IMAGE_NAME'\nBase image: '$WORKER_BASE_IMAGE'\nbuilt utils: '$BUILD_UTILS'\nbuilt sim-core: '$BUILD_SIM_CORE'\n"
 docker build -t "$IMAGE_NAME" --build-arg WORKER_IMAGE="$WORKER_BASE_IMAGE" -f docker/$DOCKER_FILE .
