@@ -137,7 +137,8 @@ public class MappingHelper {
                                     CommonStringTemplates.TYPE_JSON_VALUE));
                         }
                     case CommonStringTemplates.TYPE_STRING_VALUE,
-                         CommonStringTemplates.TYPE_OBJECT_VALUE:
+                         CommonStringTemplates.TYPE_OBJECT_VALUE,
+                         CommonStringTemplates.TYPE_FILE_NAME_VALUE:
                         if (outputVarValue.isJsonPrimitive() && outputVarValue.getAsJsonPrimitive().isString()) {
                             return outputVarValue.getAsString();
                         } else {
