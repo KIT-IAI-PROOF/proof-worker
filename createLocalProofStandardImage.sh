@@ -9,12 +9,15 @@ DIR_UTILS="$DIR_WORKER/../proof-utils"
 SIM_WHEEL_DIR="$DIR_SIM_CORE/dist"
 WORKER_WHEEL_DIR="$DIR_WORKER/proof-sim-core/dist/"
 
+# Extract the locally jib-built image tag (proof-worker:<version>) from pom-local.xml.
+WORKER_VERSION=$(grep -A1 '<artifactId>proof-worker</artifactId>' "$DIR_WORKER/pom-local.xml" \
+    | grep '<version>' | sed -E 's/.*<version>([^<]+)<.*/\1/' | head -1 || true)
+
 # Parse command line arguments
 BUILD_WORKER=false
 BUILD_SIM_CORE=false
 BUILD_UTILS=false
-IMAGE_NAME="proof-worker-python:local"
-USE_LOCAL_WORKER=true
+IMAGE_NAME="proof-worker-python:$WORKER_VERSION-local"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
