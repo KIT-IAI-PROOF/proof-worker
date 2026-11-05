@@ -68,7 +68,7 @@ while [[ $# -gt 0 ]]; do
             echo -e "  --worker, -w             Build the (local) proof-worker base image from source"
             echo -e "  --sim-core, -s           Build image based on proof-sim-core Python package changes"
             echo -e "  --utils, -u              Build and install proof-utils before building proof-worker"
-            echo -e "  --image, -i NAME         Set final image name and tag (default: proof-worker-python:<version>-local)"
+            echo -e "  --image, -i NAME         Set final image name and tag (default: proof-worker-python:<version>)"
             echo -e "  --base-image, -b [IMG]   Use LOCAL base image <IMG> (default: proof-worker:<version> from pom-local.xml)"
             echo -e "  --use-remote, -r [IMG]   Use REMOTE base image ghcr.io/kit-iai-proof/<IMG> (default: proof-worker:latest)"
             exit 1
@@ -198,12 +198,12 @@ fi
 # Resolve the base worker image injected as the Dockerfile's WORKER_IMAGE arg.
 BASE_IMG_PATH=""
 if [ "$USE_LOCAL_WORKER" = "false" ]; then
-    BASE_IMG_PATH="ghcr.io/kit-iai-proof"
+    BASE_IMG_PATH="ghcr.io/kit-iai-proof/"
     : "${BASE_IMAGE:=proof-worker:latest}"
 else
     : "${BASE_IMAGE:=proof-worker:${WORKER_VERSION}}"
 fi
-WORKER_BASE_IMAGE="$BASE_IMG_PATH/$BASE_IMAGE"
+WORKER_BASE_IMAGE="$BASE_IMG_PATH$BASE_IMAGE"
 
 echo -e "\n=== Using base image: $WORKER_BASE_IMAGE"
 
