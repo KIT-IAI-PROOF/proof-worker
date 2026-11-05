@@ -7,7 +7,7 @@ DIR_UTILS="$DIR_WORKER/../proof-utils"
 
 # Fix Paths; paths dependent of sim-core project and Dockerfile setup
 SIM_WHEEL_DIR="$DIR_SIM_CORE/dist"
-WORKER_WHEEL_DIR="proof-sim-core/dist/"
+WORKER_WHEEL_DIR="$DIR_WORKER/proof-sim-core/dist/"
 
 # Parse command line arguments
 BUILD_WORKER=false
@@ -103,7 +103,7 @@ if [ "$BUILD_SIM_CORE" = true ]; then
 
     # Empty the wheels directory to ensure only the correct wheel is present
     echo -e "\n===== Clearing wheels directory...\n"
-    rm -rf "$WORKER_WHEEL_DIR"/*
+    rm -rf "$WORKER_WHEEL_DIR"
     mkdir -p "$WORKER_WHEEL_DIR"
 
     # Copy only the wheel matching the version from setup.cfg
