@@ -29,7 +29,6 @@ public class NotifyController {
     private final Block block;
 	private final ConsumerManager consumerManager;
     private final WorkerConfig workerConfig;
-    private final Workflow workflow;
     private final MQNotifyProducer notifyProducer;
     private final MonitoringPublisher monitoringPublisher;
 
