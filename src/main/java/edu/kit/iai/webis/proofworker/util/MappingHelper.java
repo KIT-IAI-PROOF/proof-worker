@@ -80,7 +80,7 @@ public class MappingHelper {
     		final Object inputVarValue,
     		final String inputDataType,
     		final String modelVarName
-//TODO: simplyfy this method like mapOutputValue (return single values and add them in calling method
+//TODO: simplify this method like mapOutputValue (return single values and add them in calling method
     		)
     {
         LoggingHelper.debug().log("---->  Source (JSON): " + inputVarValue + ",  DATA TYPE: " + inputDataType);
@@ -90,15 +90,17 @@ public class MappingHelper {
         		case CommonStringTemplates.TYPE_JSON_VALUE ->
         			resultingData.add(modelVarName, this.gson.fromJson(inputVarValue.toString(), JsonObject.class));
                 case CommonStringTemplates.TYPE_STRING_VALUE,
-                     CommonStringTemplates.TYPE_FILE_NAME_VALUE ->
+                     CommonStringTemplates.TYPE_FILE_NAME_VALUE,
+                     CommonStringTemplates.TYPE_OBJECT_VALUE ->
         			resultingData.addProperty(modelVarName, String.valueOf(inputVarValue.toString()));
         		case CommonStringTemplates.TYPE_FLOAT_VALUE ->
         			resultingData.addProperty(modelVarName, Double.valueOf(inputVarValue.toString()));
         		case CommonStringTemplates.TYPE_INTEGER_VALUE ->
         			resultingData.addProperty(modelVarName, Integer.valueOf(inputVarValue.toString()));
         		case CommonStringTemplates.TYPE_INTEGER_ARRAY,
-        			CommonStringTemplates.TYPE_FLOAT_ARRAY,
-        			CommonStringTemplates.TYPE_STRING_ARRAY ->
+        			 CommonStringTemplates.TYPE_FLOAT_ARRAY,
+                     CommonStringTemplates.TYPE_STRING_ARRAY,
+                     CommonStringTemplates.TYPE_OBJECT_ARRAY ->
         			resultingData.add(modelVarName, this.gson.fromJson(inputVarValue.toString(), JsonArray.class));
                 default -> {
         			final String message = StringTemplates.UNEXPECTED_TYPE_VALUE.formatted(inputDataType);
@@ -134,7 +136,9 @@ public class MappingHelper {
                             throw new MappingException(StringTemplates.COULD_NOT_UNMAP_S_WITH_TYPE.formatted(outputVarValue,
                                     CommonStringTemplates.TYPE_JSON_VALUE));
                         }
-                    case CommonStringTemplates.TYPE_STRING_VALUE:
+                    case CommonStringTemplates.TYPE_STRING_VALUE,
+                         CommonStringTemplates.TYPE_OBJECT_VALUE,
+                         CommonStringTemplates.TYPE_FILE_NAME_VALUE:
                         if (outputVarValue.isJsonPrimitive() && outputVarValue.getAsJsonPrimitive().isString()) {
                             return outputVarValue.getAsString();
                         } else {
@@ -143,7 +147,8 @@ public class MappingHelper {
                         }
                     case CommonStringTemplates.TYPE_INTEGER_ARRAY,
                          CommonStringTemplates.TYPE_FLOAT_ARRAY,
-                         CommonStringTemplates.TYPE_STRING_ARRAY:
+                         CommonStringTemplates.TYPE_STRING_ARRAY,
+                         CommonStringTemplates.TYPE_OBJECT_ARRAY:
                         if (outputVarValue.isJsonArray()) {
                             return outputVarValue.getAsJsonArray().toString();
                         } else {
