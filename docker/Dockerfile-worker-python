@@ -25,7 +25,7 @@ RUN python3 -m venv /opt/venv
 
 # Single symlink (venv already provides python3/python/pip in /opt/venv/bin,
 # so these are only convenience fallbacks)
-RUN ln -s /usr/bin/python3.12 /usr/bin/python3 && ln -s /usr/bin/python3.12 /usr/bin/python
+RUN ln -s /usr/bin/python3.12 /usr/bin/python
 
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONPATH="/opt/venv"
