@@ -26,7 +26,6 @@ import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.listener.adapter.MessageListenerAdapter;
-import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
@@ -38,6 +37,7 @@ import edu.kit.iai.webis.proofutils.LoggingHelper;
 import edu.kit.iai.webis.proofutils.MessageBuilder;
 import edu.kit.iai.webis.proofutils.helper.NameHelper;
 import edu.kit.iai.webis.proofutils.io.MQNotifyProducer;
+import edu.kit.iai.webis.proofutils.io.ProofMessageConverter;
 import edu.kit.iai.webis.proofutils.message.MessageType;
 import edu.kit.iai.webis.proofutils.message.NotifyMessage;
 import edu.kit.iai.webis.proofutils.model.CommunicationType;
@@ -188,7 +188,7 @@ public class StartupRunner implements CommandLineRunner {
         LoggingHelper.debug().log("instantiating SYNC Queue:  " + syncQueueName);
         this.consumerManager.instantiateReceiver(syncQueueName, MessageType.SYNC,
                 new MessageListenerAdapter(new MQSyncHandler(this.syncController, this.notifyController),
-                        new Jackson2JsonMessageConverter()));
+                        ProofMessageConverter.create()));
     }
 
     /**
@@ -270,7 +270,7 @@ public class StartupRunner implements CommandLineRunner {
 
     			this.consumerManager.instantiateReceiver(queueName, MessageType.VALUE,
     					new MessageListenerAdapter(new MQValueHandler(this.valueController, this.notifyController, input),
-    							new Jackson2JsonMessageConverter()));
+    							ProofMessageConverter.create()));
 
     			final var inputSource = new InputQueueNameMapping(input, queueName);
     			this.valueController.addInputQueueNameMapping(inputSource);
@@ -288,7 +288,7 @@ public class StartupRunner implements CommandLineRunner {
     		final var staticInputsQueueName = NameHelper.getStaticInputsQueueName(this.workerConfig.getWorkflowExecutionId(),this.block);
     		this.consumerManager.instantiateReceiver(staticInputsQueueName, MessageType.VALUE,
     				new MessageListenerAdapter(new MQInitValueHandler(this.valueController, this.notifyController, staticInputs),
-    						new Jackson2JsonMessageConverter()));
+    						ProofMessageConverter.create()));
 
     		staticInputs.forEach(input -> {
     			final var inputQNM = new InputQueueNameMapping(input, staticInputsQueueName);
