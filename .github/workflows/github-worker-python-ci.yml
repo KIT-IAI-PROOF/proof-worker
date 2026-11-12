@@ -81,3 +81,8 @@ jobs:
             .
           
           docker push ghcr.io/kit-iai-proof/proof-worker-python:${WORKER_PYTHON_TAG}
+          
+          if [[ ! "${WORKER_PYTHON_TAG}" =~ (dev|feature|test|local) ]]; then
+            docker tag ${IMAGE_NAME}:${WORKER_PYTHON_TAG} ${IMAGE_NAME}:latest
+            docker push ghcr.io/kit-iai-proof/proof-worker-python:latest
+          fi
