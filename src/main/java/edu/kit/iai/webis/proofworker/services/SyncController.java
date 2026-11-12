@@ -183,7 +183,7 @@ public class SyncController {
                     LoggingHelper.debug().log("The BLOCK '%s' has NO dynamic Inputs from other blocks, writing SYNC " +
                             "to STREAM (Wrapper), phase=%s", this.block.getName(), SimulationPhase.EXECUTE);
                     this.writeSyncMessageToStream(syncMessage, this.currentModelInputInterface);
-                    this.currentModelInputInterface.clearValues();  // TODO: still necessary? Work is done with new method modelInputInterface.prepareNextStep()
+                    this.currentModelInputInterface.clearValues();
                 }
 				else {
                     /*
@@ -297,13 +297,6 @@ public class SyncController {
                                 this.notifyController.sendNotifyMessage(notifyMessage);
                             }
                         }
-//                        case WAIT_AND_RETRY -> {  // TODO: implement => see above
-//                            LoggingHelper.info()
-//                            .log("SimulationStrategy=WAIT_AND_RETRY::   Value not present for block '%s', waiting for SYNC from Orchestrator", this.block.getId());
-//
-//                            final NotifyMessage notifyMessage = (NotifyMessage) this.createMessage(MessageType.NOTIFY, this.currentSimulationPhase, SimulationStatus.READY);
-//                            this.notifyController.sendNotifyMessage(notifyMessage);
-//                        }
 
                         default ->
                                 throw new RuntimeException("Unexpected value: " + this.workflow.getSimulationStrategy());
