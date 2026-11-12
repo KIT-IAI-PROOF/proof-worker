@@ -11,7 +11,7 @@
     </parent>
     <groupId>edu.kit.iai.webis.proof</groupId>
     <artifactId>proof-worker</artifactId>
-    <version>1.4.0-dev1-local</version>
+    <version>1.4.0-local</version>
     <name>Proof Worker</name>
     <description>Proof Worker</description>
     <properties>
@@ -21,7 +21,7 @@
         <dependency>
             <groupId>edu.kit.iai.webis.proof</groupId>
             <artifactId>proof-utils</artifactId>
-            <version>1.2.0-dev0</version>
+            <version>1.2.0</version>
         </dependency>
         <!-- Spring starters -->
         <dependency>
