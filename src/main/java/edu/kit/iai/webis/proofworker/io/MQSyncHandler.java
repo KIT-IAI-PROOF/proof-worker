@@ -4,6 +4,9 @@
  */
 package edu.kit.iai.webis.proofworker.io;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import edu.kit.iai.webis.proofutils.Colors;
 import edu.kit.iai.webis.proofutils.LoggingHelper;
 import edu.kit.iai.webis.proofutils.MessageBuilder;
@@ -27,6 +30,13 @@ public class MQSyncHandler {
     private final SyncController syncController;
     private final NotifyController notifyController;
 	private boolean shutdownReceived = false;
+	// SYNC messages are processed sequentially in a separate thread so that the listener thread stays free to receive
+	// FINALIZE/SHUTDOWN while a step is waiting for input values
+	private final ExecutorService stepExecutor = Executors.newSingleThreadExecutor(r -> {
+		final Thread t = new Thread(r, "sync-step-processor");
+		t.setDaemon(true);
+		return t;
+	});
 
     /**
      * Create a MQSyncHandler instance
@@ -65,6 +75,13 @@ public class MQSyncHandler {
     		}
     	}
 
+        if( syncMessage.getSimulationPhase() == SimulationPhase.FINALIZE || syncMessage.getSimulationPhase() == SimulationPhase.SHUTDOWN ) {
+            this.syncController.abortWaiting();
+        }
+        this.stepExecutor.execute(() -> this.processSync(syncMessage));
+    }
+
+    private void processSync(final SyncMessage syncMessage) {
         try {
             this.syncController.processStep(syncMessage);
 
