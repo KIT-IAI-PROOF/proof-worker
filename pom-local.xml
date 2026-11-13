@@ -152,14 +152,14 @@
                         <id>deploy-alpine</id>
                         <phase>deploy</phase>
                         <goals>
-                            <goal>build</goal>
+                            <goal>dockerBuild</goal>
                         </goals>
                         <configuration>
                             <from>
                                 <image>eclipse-temurin:21-jre-alpine</image>
                             </from>
                             <to>
-                                <image>ghcr.io/kit-iai-proof/proof-worker-alpine:${project.version}</image>
+                                <image>proof-worker-alpine:${project.version}</image>
                                 <tags>
                                     <tag>${jib.extra.tag}</tag>
                                 </tags>
