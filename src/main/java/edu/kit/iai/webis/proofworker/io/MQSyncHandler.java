@@ -45,12 +45,16 @@ public class MQSyncHandler {
      * @param syncMessage Message as TactMessage
      */
     public void handleMessage(final SyncMessage syncMessage) {
-    	LoggingHelper.info().log("\n===== O ====>  SYNC Message received from Orchestrator!  Phase: %s, Time=%s  \t\t  ---> CP=%d", syncMessage.getSimulationPhase(),
-    			DateTimeHelper.doConversion( syncMessage.getTimeInMillis(), FormatType.TIME_HMSMS, EpochTimeScale.MILLISECOND),
-    			syncMessage.getCommunicationPoint());
+    	if( LoggingHelper.isLevelDebugOrTrace() ) {
+    		LoggingHelper.info().log("\n===== O ====>  SYNC Message received from Orchestrator!  Phase: %s, Time=%s  \t\t  ---> CP=%d", syncMessage.getSimulationPhase(),
+    				DateTimeHelper.doConversion( syncMessage.getTimeInMillis(), FormatType.TIME_HMSMS, EpochTimeScale.MILLISECOND),
+    				syncMessage.getCommunicationPoint());
+    	}
+    	else {
+    		LoggingHelper.info().log("current CP: " + syncMessage.getCommunicationPoint());
+    	}
 
     	if( syncMessage.getSimulationPhase() == SimulationPhase.SHUTDOWN ) {
-            LoggingHelper.debug().log("SHUTDOWN RECEIVED FOR THE FIRST TIME!   shutdownReceived=" + this.shutdownReceived);
     		if( ! this.shutdownReceived ) {
     			this.shutdownReceived  = true;
     		}

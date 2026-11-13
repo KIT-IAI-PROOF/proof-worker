@@ -39,9 +39,13 @@ public class ModelInputInterface implements IValueOutputWrapper{
     private Map<String, String> inputNameMappings = new HashMap<String, String>();
 
     /**
-     * Map containing the name mappings for the required inputs of a block
+     * Map containing the name mappings for the required inputs of a block: <name, modelVarName>
      */
     private Map<String, String> requiredInputNameMappings = new HashMap<String, String>();
+
+	/**
+	 * Collection of elements where every element is unique: <modelVarName>
+	 */
     private HashSet<String> missingRequiredInputValues = new HashSet<String>();
 
     /**
@@ -112,7 +116,7 @@ public class ModelInputInterface implements IValueOutputWrapper{
 					}
 					else {
 						// If no start value given, add to missing required input.
-						mii.missingRequiredInputValues.add(input.getName()); 
+						mii.missingRequiredInputValues.add(input.getModelVarName());
 				    	LoggingHelper.warn().log("no start value given for required input %s for phase %s!",
 				    			input.getName(), simulationPhase);
 					}
@@ -177,16 +181,34 @@ public class ModelInputInterface implements IValueOutputWrapper{
 	}
 
 	@Override
-    public void addToValues(final String name, final Object value) {
+    public void addToValues(final String modelVarName, final Object value) {
 		synchronized( this.values ) {
-			this.values.put(name, value);
+			this.values.put(modelVarName, value);
 		}
-		this.missingRequiredInputValues.remove(name);
+		// @TODO:  Reduktion funzt nur für den ersten Step der Phase => "reset" nach dem Senden der Values.
+		// Beachten: was passiert bei (required) Values, die nach dem Senden und vor der NotifyMessage "Ex_STEP_Finished" des Wrappers ankommen?
+		this.missingRequiredInputValues.remove(modelVarName);
 
-        LoggingHelper.debug().log("=> value '%s' saved, #values=%d,  all values given: %s", name, this.values.size(), this.allNeededValuesGiven);
+        LoggingHelper.debug().log("=> value '%s' saved, #values=%d,  all values given: %s", modelVarName, this.values.size(), this.allNeededValuesGiven);
 
-        switch (this.syncStrategy) {
+        if( this.syncStrategy == SyncStrategy.INSTANT ) {
+        	this.sentValues.put(modelVarName, value);
+        }
+        this.updateAllNeededValuesGivenState();
+        LoggingHelper.debug().log("=> all values given: %s", this.allNeededValuesGiven);
+    }
+
+	/**
+	 * (Re-)evaluate whether all needed values are given for the current syncStrategy.
+	 * Must not depend on a value having just arrived: optional (non-required) inputs may
+	 * never receive a value at all, so readiness has to be derivable from the current
+	 * state alone. Called lazily from allNeededValuesGiven().
+	 */
+	private void updateAllNeededValuesGivenState() {
+		LoggingHelper.debug().log("Update allValuesGiven for strategy %s", this.syncStrategy);
+		switch (this.syncStrategy) {
 			case ALL_VALUES -> {
+				LoggingHelper.debug().log("Strategy '%s': allValuesGiven= (%d==%d)", this.syncStrategy, this.values.size(), this.inputNameMappings.size());
 				if( this.values.size() == this.inputNameMappings.size() ) {
 					this.allNeededValuesGiven = true;
 				}
@@ -196,38 +218,30 @@ public class ModelInputInterface implements IValueOutputWrapper{
 					LoggingHelper.debug().log("no mappings and values for this block");
 					this.allNeededValuesGiven = true;
 				}
-				else if( this.requiredInputNameMappings.size() > 0 ) {
-					if( this.missingRequiredInputValues.isEmpty() ) {
-						LoggingHelper.debug().log("requiredInputNameMappings.size() > 0 (%d) && all req. values given", this.requiredInputNameMappings.size());
-						this.allNeededValuesGiven = true;
-					}
-					else {
-						LoggingHelper.debug().log("requiredInputNameMappings.size() > 0 (%d) but not all req. values given, missing values: %s",
-								this.requiredInputNameMappings.size(), this.missingRequiredInputValues);
-					}
-				}
-				else if( this.inputNameMappings.size() > 0
-						&& this.values.size() > 0)  // any non-required value given
-				{
-					LoggingHelper.debug().log("inputNameMappings.size() > 0 (%d) && this.values.size() > 0  (%d)",
-							this.inputNameMappings.size(), this.values.size());
+				else if( this.missingRequiredInputValues.isEmpty() ) {
+					// all required inputs (if any) have values; remaining (optional) inputs may still be missing, that's fine
+					LoggingHelper.debug().log("all required inputs (%d) have values, remaining inputs (if any) are optional", this.requiredInputNameMappings.size());
 					this.allNeededValuesGiven = true;
+				}
+				else {
+					LoggingHelper.debug().log("requiredInputNameMappings.size() > 0 (%d) but not all req. values given, missing values: %s",
+							this.requiredInputNameMappings.size(), this.missingRequiredInputValues);
 				}
 			}
 			case INSTANT -> {
-				this.sentValues.put(name, value);
+				LoggingHelper.debug().log("Strategy '%s': allValuesGiven= allkeysContaind?:\n%s\n%s", this.syncStrategy, this.sentValues.keySet(), this.requiredInputNameMappings.keySet());
 				if( this.sentValues.keySet().containsAll( this.requiredInputNameMappings.keySet() ) ) {
 					this.allNeededValuesGiven = true;
 				}
 			}
         }
-        LoggingHelper.debug().log("=> all values given: %s", this.allNeededValuesGiven);
-    }
+		LoggingHelper.debug().log("Set allValuesGiven to '%b'", this.allNeededValuesGiven);
+	}
 
 	public void useDefaultValues() {
-		this.missingRequiredInputValues.forEach(in -> {
+		this.missingRequiredInputValues.forEach(modelVarName -> {
 			this.block.getInputs(this.simulationPhase).forEach(input -> {
-				if( input.getModelVarName().equals(in) ) {
+				if( input.getModelVarName().equals(modelVarName) ) {
 					if( input.getDefaultValue() != null ) {
 						this.addToValues(input.getModelVarName(), input.getDefaultValue() );
 					}
@@ -240,6 +254,9 @@ public class ModelInputInterface implements IValueOutputWrapper{
 	}
 
 	public boolean allNeededValuesGiven() {
+		if( !this.allNeededValuesGiven ) {
+			this.updateAllNeededValuesGivenState();
+		}
 		return this.allNeededValuesGiven;
 	}
 
@@ -289,7 +306,7 @@ public class ModelInputInterface implements IValueOutputWrapper{
 	public void prepareNextStep() {
 		this.clearValues();
 		this.sentValues.clear();
-		this.missingRequiredInputValues.addAll(this.requiredInputNameMappings.keySet());
+		this.missingRequiredInputValues.addAll(this.requiredInputNameMappings.values());
 	}
 
 }

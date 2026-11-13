@@ -86,7 +86,7 @@ public class OutputSocketReader implements IReader{
 				}
 
 			} catch (final IOException e) {
-				//REFACTOR: use ERROR_ACCESSING_STREAM_READER
+				// TODO REFACTOR: use ERROR_ACCESSING_STREAM_READER
 				final var message = StringTemplates.COULD_NOT_OPEN_STREAM_READER;
 				LoggingHelper.error().log(message + ", reason: " + e.getMessage() );
 				throw new StreamIOException(message, e);

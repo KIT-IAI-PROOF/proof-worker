@@ -105,8 +105,8 @@ public class WorkerConfig {
     /**
      * the time the process should wait for required inputs in seconds
      */
-    @Value("${proof.worker.process.timeout:10}")
-    private Integer processTimeout;
+    @Value("${proof.worker.input.timeout:10}")
+    private Integer inputTimeout;
 
     /**
      * create WorkerConfig instance with given autowired arguments
@@ -117,10 +117,10 @@ public class WorkerConfig {
     }
 
     /**
-	 * @return the processTimeout
+	 * @return the inputTimeout
 	 */
-	public Integer getProcessTimeout() {
-		return this.processTimeout;
+	public Integer getInputTimeout() {
+		return this.inputTimeout;
 	}
 
 	/**

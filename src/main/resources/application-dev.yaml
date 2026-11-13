@@ -18,8 +18,8 @@ spring:
     username: admin
 proof:
   worker:
-    process:
-      timeout: 10
+    input:
+      timeout: 5
     workflow:
       executionId: "devExId"
 timezone: Europe/Berlin

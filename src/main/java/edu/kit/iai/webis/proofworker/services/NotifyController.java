@@ -8,8 +8,11 @@ import org.springframework.stereotype.Service;
 
 import edu.kit.iai.webis.proofutils.LoggingHelper;
 import edu.kit.iai.webis.proofutils.MessageBuilder;
+import edu.kit.iai.webis.proofutils.helper.DateTimeHelper;
 import edu.kit.iai.webis.proofutils.helper.NameHelper;
 import edu.kit.iai.webis.proofutils.helper.StepSizeDefinitionHelper;
+import edu.kit.iai.webis.proofutils.helper.DateTimeHelper.EpochTimeScale;
+import edu.kit.iai.webis.proofutils.helper.DateTimeHelper.FormatType;
 import edu.kit.iai.webis.proofutils.io.MQNotifyProducer;
 import edu.kit.iai.webis.proofutils.message.BaseMessage;
 import edu.kit.iai.webis.proofutils.message.IMessage;
@@ -30,7 +33,7 @@ public class NotifyController {
     private final Block block;
 	private final ConsumerManager consumerManager;
     private final WorkerConfig workerConfig;
-    private final Workflow workflow;
+    private final Workflow workflow;  // TODO: remove, unused
     private final MQNotifyProducer notifyProducer;
     private final MonitoringPublisher monitoringPublisher;
 
@@ -86,7 +89,7 @@ public class NotifyController {
         SimulationStatus blockStatus = notifyMessage.getBlockStatus();
 		this.statusHelper.setStatus(blockStatus);
 
-		// Publish status update to monitoring service
+		// Publish status update to UI
 		// this.communicationPoint is used to send the notifyMessage, so use it here too.
 		this.monitoringPublisher.publishStatusUpdate(blockStatus, this.communicationPoint, notifyMessage.getErrorText());
 
@@ -102,7 +105,7 @@ public class NotifyController {
 				LoggingHelper.trace().log("BlockStatus=" + blockStatus + " BEFORE checking whether the execution is finished");
 
 				if (sum > this.endPoint) {
-					LoggingHelper.info().log( "(CP=%d, StepSize=%d) CP+StepSize=%d > %d (endPoint): sending EXECUTION_FINISHED to Orchestrator ...",
+					LoggingHelper.debug().log( "(CP=%d, StepSize=%d) CP+StepSize=%d > %d (endPoint): sending EXECUTION_FINISHED to Orchestrator ...",
 							this.communicationPoint, commStepSize, sum, this.endPoint );
 					blockStatus = SimulationStatus.EXECUTION_FINISHED;
 				} else {
@@ -132,9 +135,8 @@ public class NotifyController {
 
         this.sendNotifyMessage((NotifyMessage)ntfyMessage);
 
-        LoggingHelper.info()
-        	.messageObject(ntfyMessage)
-            .log("NOTIFY sent to orchestrator (Status: %s, CP=%d (local: %d))\n", blockStatus, notifyMessage.getCommunicationPoint(), this.communicationPoint );
+  		LoggingHelper.debug().messageObject(ntfyMessage)
+    		.log("NOTIFY sent to orchestrator (Status: %s, CP=%d (local: %d))\n", blockStatus, notifyMessage.getCommunicationPoint(), this.communicationPoint );
 
         if( blockStatus.equals(SimulationStatus.SHUT_DOWN )){
         	this.shutdown();
@@ -163,21 +165,10 @@ public class NotifyController {
 
 	private void shutdown() {
 		try {
-            final IMessage notifyMessage = MessageBuilder.init(MessageType.NOTIFY)
-                    .blockStatus(SimulationStatus.SHUT_DOWN)
-                    .copyOf(this.baseMessage)
-                    .simulationPhase(SimulationPhase.SHUTDOWN)
-                    .communicationPoint(this.communicationPoint)
-                    .build();
-
-            this.sendNotifyMessage((NotifyMessage) notifyMessage);
-			// give half a second to send the message
-			LoggingHelper.info().log("shutting down Block '" + this.workerConfig.getGlobalBlockId() + "' ... waiting 2000ms to stop consumers\n");
-			Thread.currentThread().join(2000);
 			this.consumerManager.stopConsumers();
 			LoggingHelper.info().log("shutting down ... ");
 			System.exit(0);
-		} catch (InterruptedException e) {
+		} catch (Exception e) {
 			e.printStackTrace();
 		}
 	}

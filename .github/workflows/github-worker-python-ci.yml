@@ -11,6 +11,11 @@ on:
         required: false
         type: string
         default: 'latest'
+      sim_core_version:
+        description: 'Version of proof-sim-core'
+        required: false
+        type: string
+        default: 'main'
 
 env:
   GITHUB_TOKEN: ${{ secrets.PROOF_PACKAGE_CI_TOKEN }}
@@ -26,7 +31,7 @@ jobs:
         with:
           repository: kit-iai-proof/proof-sim-core
           path: proof-sim-core
-          ref: main
+          ref: ${{ inputs.sim_core_version }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
@@ -81,3 +86,8 @@ jobs:
             .
           
           docker push ghcr.io/kit-iai-proof/proof-worker-python:${WORKER_PYTHON_TAG}
+          
+          if [[ ! "${WORKER_PYTHON_TAG}" =~ (dev|feature|test|local) ]]; then
+            docker tag ${IMAGE_NAME}:${WORKER_PYTHON_TAG} ${IMAGE_NAME}:latest
+            docker push ghcr.io/kit-iai-proof/proof-worker-python:latest
+          fi

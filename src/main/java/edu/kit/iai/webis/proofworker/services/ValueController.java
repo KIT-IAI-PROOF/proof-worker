@@ -7,11 +7,13 @@ package edu.kit.iai.webis.proofworker.services;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.StringJoiner;
 
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
 import com.google.gson.JsonElement;
@@ -32,6 +34,7 @@ import edu.kit.iai.webis.proofutils.model.SimulationPhase;
 import edu.kit.iai.webis.proofutils.model.SimulationStatus;
 import edu.kit.iai.webis.proofutils.model.SyncStrategy;
 import edu.kit.iai.webis.proofutils.wrapper.Block;
+import edu.kit.iai.webis.proofutils.wrapper.IOElement;
 import edu.kit.iai.webis.proofutils.wrapper.Input;
 import edu.kit.iai.webis.proofutils.wrapper.Output;
 import edu.kit.iai.webis.proofworker.config.WorkerConfig;
@@ -57,11 +60,12 @@ public class ValueController {
     private final WorkerConfig workerConfig;
     private final MappingHelper mappingHelper;
     private final MQValueProducer valueProducer;
-    private final NotifyController notifyController;  // to send (error) messages to the orchestrator.
+    private final NotifyController notifyController;
+    private final RabbitTemplate rabbitTemplate;
 
     private final BaseMessage baseMessage;
     private Integer communicationPoint = 0;
-	private StepSizeDefinitionHelper stepSizeDefinitionHelper;  // for startPoint, endPoint etc.
+	private StepSizeDefinitionHelper stepSizeDefinitionHelper;
 	private int startPoint, endPoint;
 
 	private ValueMessage baseValueMessage;
@@ -90,13 +94,15 @@ public class ValueController {
             final WorkerConfig workerConfig,
             final NotifyController notifyController,
             final MQValueProducer valueProducer,
-            final MappingHelper mappingHelper
+            final MappingHelper mappingHelper,
+            final RabbitTemplate rabbitTemplate
 	) {
         this.block = block;
         this.workerConfig = workerConfig;
         this.notifyController = notifyController;
         this.mappingHelper = mappingHelper;
         this.valueProducer = valueProducer;
+        this.rabbitTemplate = rabbitTemplate;
         this.baseMessage = new BaseMessage();
         this.baseMessage.setLocalBlockId(this.workerConfig.getLocalBlockId());
         this.baseMessage.setGlobalBlockId(this.workerConfig.getGlobalBlockId());
@@ -155,6 +161,11 @@ public class ValueController {
         	            	var outputData = this.mappingHelper.mapOutputValue(outputVarValue, outputDataType);
         	            	LoggingHelper.debug().log("OutputData: " + outputData + ", outputVarValue: " + outputVarValue
         	            			+ ", outputType: " + outputDataType );
+        	            	
+        	            	// Publish OUTPUT event
+        	            	publishValueUpdateToStream(output, outputData, "OUTPUT",
+        	            	                           valueMessage.getCommunicationPoint());
+        	            	
         	            	this.baseValueMessage.setData(outputData);
         	        		this.valueProducer.sendToExchange(outputQueueNameMapping.getQueue(), outputQueueNameMapping.getQueue(),
         	        				this.baseValueMessage);
@@ -189,7 +200,6 @@ public class ValueController {
     private void sendValuesToWrapper(SimulationPhase simulationPhase, Integer communicationPoint, boolean current )
     {
     	this.communicationPoint = communicationPoint;
-    	// für jeden Output (OQNMapping) mappe den Output-Namen und -Wert
     	this.baseValueMessage.setSimulationPhase(simulationPhase);
 
         final ModelInputInterface modelInputInterface = ModelInputInterface.getModelInputInterface(simulationPhase);
@@ -210,6 +220,9 @@ public class ValueController {
     			this.mappingHelper.mapInputValue(resultingData, inputVarValue, inputDataType, modelVarName);
     			LoggingHelper.debug().log("mapped element: value: '%s' , inputDataType: %s , targetName: %s",
     					inputVarValue, inputDataType, modelVarName);
+    			
+    			// Publish SENT event for this value
+    			publishValueUpdateToStream(input, inputVarValue, "SENT", this.communicationPoint);
     		} catch (Exception e) {
     			LoggingHelper.error().exception(e).log("ERROR mapping element!");
     		}
@@ -285,10 +298,10 @@ public class ValueController {
     }
 
     /**
-     * get a list of {@link InputQueueNameMappings} for a given {@link SimulationPhase}
+     * get a list of {@link InputQueueNameMapping}s for a given {@link SimulationPhase}
      *
      * @param phase the given {@link SimulationPhase}
-     * @return a list of found {@link InputQueueNameMappings}s, may be empty
+     * @return a list of found {@link InputQueueNameMapping}s, may be empty
      */
     public Map<String, InputQueueNameMapping> getInputQueueNameMappings(SimulationPhase phase) {
         return this.inputQueueNameMappingPerPhase.get(phase);
@@ -298,17 +311,17 @@ public class ValueController {
     /**
      * add an {@link OutputQueueNameMapping} to the ValueController
      *
-     * @param outputQueueNameMapping the {@link IOSink} to be added.
-     *               If it already exists, identified by it's id, it will override the existing one
+     * @param outputQueueNameMapping the {@link OutputQueueNameMapping} to be added.
+     *               If it already exists, identified by its id, it will override the existing one
      */
     public void addOutputQueueNameMapping(OutputQueueNameMapping outputQueueNameMapping) {
     	this.outputQueueNameMappingPerPhase.get(outputQueueNameMapping.getOutput().getSimulationPhase()).add(outputQueueNameMapping);
     }
 
     /**
-     * get a list of {@link OutputQueueNameMappings} for a given {@link SimulationPhase}
+     * get a list of {@link OutputQueueNameMapping}s for a given {@link SimulationPhase}
      *
-     * @param phasethe given {@link SimulationPhase}
+     * @param phase the given {@link SimulationPhase}
      * @return a list of found {@link OutputQueueNameMapping}s, may be empty
 
      */
@@ -316,14 +329,14 @@ public class ValueController {
         return this.outputQueueNameMappingPerPhase.get(phase);
     }
 
-    /**
-     * Save the INIT value(s) received from orchestrator (via RabbitMQ) in temporary buffer, to send them to the wrapper when
-     * tact sync is received or when values should be forwarded immediately to the wrapper
-     *
-     * @param rawValue    Value to save, can be JSON, string or number
-     * @param staticInput Target input of this value transmission
-     */
-//    public synchronized void processInitValue(Object rawValue, final Input staticInput) {//throws TypeMismatchException, ValueConfigException {
+//    /**
+//     * Save the INIT value(s) received from orchestrator (via RabbitMQ) in temporary buffer, to send them to the wrapper when
+//     * tact sync is received or when values should be forwarded immediately to the wrapper
+//     *
+//     * @param rawValue    Value to save, can be JSON, string or number
+//     * @param staticInput Target input of this value transmission
+//     */
+//    public synchronized void processInitValue(Object rawValue, final Input staticInput) throws TypeMismatchException, ValueConfigException {
 //
 //    	final SimulationPhase simulationPhase = staticInput.getSimulationPhase();
 //    	LoggingHelper.debug().log("processing INIT Value '%s' (Input='%s', type=%s, modelVarName: %s, default value: %s)",
@@ -393,7 +406,7 @@ public class ValueController {
      * tact sync is received or when values should be forwarded immediately to the wrapper
      *
      *
-     * @param rawValue    Value to save, can be JSON, string or number
+     * @param valueMessage Value to save, can be JSON, string or number
      * @param targetInput Target input of this value transmission
      */
     public synchronized void processValue(final ValueMessage valueMessage, final Input targetInput) throws TypeMismatchException, ValueConfigException {
@@ -403,19 +416,29 @@ public class ValueController {
         	rawValue = ( this.communicationPoint == this.startPoint ? targetInput.getStartValue() : targetInput.getDefaultValue() );
         }
         Objects.requireNonNull(rawValue, "value is not given, neither by start value nor by default value!");
+        
+        // Publish RECEIVED event
+        publishValueUpdateToStream(targetInput, rawValue, "RECEIVED", this.communicationPoint);
+        
     	final String modelVarName = targetInput.getModelVarName();
     	final SimulationPhase simulationPhase = targetInput.getSimulationPhase();
     	LoggingHelper.debug().log("processing Value '%s' (simulationPhase= %s, type=%s, Input=%s, modelVarName: %s)",
     			rawValue, simulationPhase, targetInput.getType().getValue(), targetInput.getName(), modelVarName);
 
 		// Use the default value for processing if no rawValue is present
-		// REFACTOR: if CP=startPt: startValue else default!
+		// TODO: REFACTOR: if CP=startPt: startValue else default!
 
     	ValueHelper.Result result = ValueHelper.getValue(rawValue, targetInput.getType().getValue());
+        
+        // Publish VALIDATED event
+        publishValueUpdateToStream(targetInput, result.value(), "VALIDATED", this.communicationPoint);
 
     	final ModelInputInterface modelInputInterface = ModelInputInterface.getModelInputInterface(simulationPhase);
 
     	modelInputInterface.addToValues(modelVarName, result.value());  // check there whether all needed values are given
+        
+        // Publish BUFFERED event
+        publishValueUpdateToStream(targetInput, result.value(), "BUFFERED", this.communicationPoint);
 
     	LoggingHelper.debug().messageObject(this.baseMessage)
     	.log("Saved received value (%s)  \t\t#vals=%d", result.value(), modelInputInterface.getValues().size() );
@@ -437,6 +460,10 @@ public class ValueController {
     				// write values immediately to the wrapper
     				LoggingHelper.debug().messageObject(this.baseMessage).log("Forwarding value '%s' due to SyncStrategy INSTANT", result.value());
     				this.sendInstantValueToWrapper(simulationPhase, modelInputInterface, modelVarName, result.value());
+    				
+    				// Publish SENT event
+    				publishValueUpdateToStream(targetInput, result.value(), "SENT", this.communicationPoint);
+    				
     				modelInputInterface.addToSentValues(modelVarName, result.value());
     			}
     			case ALL_VALUES, WAIT_FOR_SYNC -> {
@@ -500,7 +527,7 @@ public class ValueController {
     	final ValueMessage valueMessage = (ValueMessage) MessageBuilder
     			.init(MessageType.VALUE)
     			.copyOf(this.baseMessage)
-    			.data(this.baseValueMessage.getData())
+    			.data(this.baseValueMessage.getData())  // @TODO:  copyOf of MessageBuilder extend with attribute 'data'
     			.simulationPhase(modelInputInterface.getSimulationPhase())
     			.communicationPoint(communicationPoint == null ? 0 : communicationPoint)
     			.build();
@@ -510,7 +537,7 @@ public class ValueController {
     			"Values: " + valueMessage.getData());
 
     	modelInputInterface.getWriter().writeValueMessage(valueMessage);
-    	// REFACTOR: correct to clear only when INSTANT ? => values are always stored for RETRY in clearValues()
+    	// RL TODO REFACTOR: correct to clear only when INSTANT ? => values are always stored for RETRY in clearValues()
     	if( this.block.getSyncStrategy() != SyncStrategy.INSTANT ) {
     		modelInputInterface.clearValues();
     	}
@@ -531,6 +558,7 @@ public class ValueController {
         		"Values: " + valueMessage.getData());
 
         modelInputInterface.getWriter().writeValueMessage(valueMessage);
+        //RL TODO:  correct to clear always? => values are always stored for RETRY in clearValues() !?
         modelInputInterface.clearValues();
         LoggingHelper.debug().messageColor(Colors.ANSI_RED).log("values written, values cleared");
     }
@@ -543,4 +571,62 @@ public class ValueController {
     public void setCommunicationPoint(Integer communicationPoint) {
 		this.communicationPoint = communicationPoint;
 	}
+
+    /**
+     * Publish a value update to the value stream queue.
+     * 
+     * @param element Element containing name, id and data type (e.g., "FLOAT", "INTEGER")
+     * @param value the actual value
+     * @param status the event status (RECEIVED, VALIDATED, BUFFERED, SENT, OUTPUT, FAILED)
+     * @param communicationPoint the communication point
+     */
+	private void publishValueUpdateToStream(IOElement element, Object value, String status, Integer communicationPoint) {
+		publishValueUpdateToStream(element, value, status, communicationPoint, null);
+    }
+
+    /**
+     * Publish a value update to the value stream queue with optional error message.
+     * 
+     * @param element Element containing name, id and data type (e.g., "FLOAT", "INTEGER")
+     * @param value the actual value
+     * @param status the event status (RECEIVED, VALIDATED, BUFFERED, SENT, OUTPUT, FAILED)
+     * @param communicationPoint the communication point
+     * @param errorMessage optional error message for FAILED events
+     */
+    private void publishValueUpdateToStream(IOElement element, Object value, String status, 
+                                           Integer communicationPoint, String errorMessage) {
+        try {
+            String queueName = "value.execution." + this.workerConfig.getWorkflowExecutionId();
+            String valueName = element.getName();
+			String valueId = element.getId();
+			String dataType = element.getType().getValue();
+
+            Map<String, Object> valueUpdate = new LinkedHashMap<>();
+            valueUpdate.put("blockId", this.workerConfig.getGlobalBlockId());
+            valueUpdate.put("valueName", valueName);
+			valueUpdate.put("valueId", valueId);
+            valueUpdate.put("value", value);
+            valueUpdate.put("dataType", dataType);
+            valueUpdate.put("status", status);
+            valueUpdate.put("communicationPoint", communicationPoint);
+            valueUpdate.put("timestamp", System.currentTimeMillis());
+            valueUpdate.put("simulationPhase", this.baseValueMessage.getSimulationPhase() != null ? 
+                           this.baseValueMessage.getSimulationPhase().toString() : "UNKNOWN");
+            
+            if (errorMessage != null) {
+                valueUpdate.put("error", errorMessage);
+            }
+            
+            this.rabbitTemplate.convertAndSend(queueName, valueUpdate);
+            
+            LoggingHelper.trace().log(
+                "Published value update: value=%s, status=%s, cp=%d",
+                valueName, status, communicationPoint
+            );
+        } catch (Exception e) {
+            LoggingHelper.warn().log(
+                "Failed to publish value update: %s", e.getMessage()
+            );
+        }
+    }
 }

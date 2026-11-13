@@ -126,7 +126,7 @@ public class StartupRunner implements CommandLineRunner {
     }
 
     public void declareLogQueue() {
-        final var queue = QueueBuilder.durable("logs.block." + this.appName + ".execution." + this.execution.getId()).build();
+        final var queue = QueueBuilder.durable("logs.block." + this.appName + ".execution." + this.execution.getId()).stream().build();
         final var binding = BindingBuilder.bind(queue).to(new TopicExchange("logs")).with(queue.getName());
         this.amqpAdmin.declareQueue(queue);
         this.amqpAdmin.declareBinding(binding);
@@ -137,9 +137,7 @@ public class StartupRunner implements CommandLineRunner {
      */
     @Override
     public void run(final String... args) {
-        LoggingHelper.printColored(false);
         LoggingHelper.logSourcePosition(true);
-        LoggingHelper.info().messageColor(Colors.ANSI_WHITE).log("Change colour to: white");
         // Set the log level from configuration
         LoggingHelper.setLogLevel(this.workerConfig.getLogLevel());
         LoggingHelper.info().log("Current LOG Level is " + LoggingHelper.getLogLevel());
@@ -180,7 +178,7 @@ public class StartupRunner implements CommandLineRunner {
 
             LoggingHelper.info().log(StringTemplates.BLOCK_STARTED.formatted( this.block.getIndex(), this.block.getId()));
         }
-        // FEAT: Implement event based workflow
+        // TODO FEAT: Implement event based workflow
     }
 
     /**
