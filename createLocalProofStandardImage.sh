@@ -1,16 +1,29 @@
 #!/bin/bash
+# Fail fast on any error, unset variable, or failed pipe stage.
+set -euo pipefail
 
 # Absolute Paths
 DIR_WORKER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIR_SIM_CORE="$DIR_WORKER/../proof-sim-core"
 DIR_UTILS="$DIR_WORKER/../proof-utils"
 
+# Fix Paths; paths dependent of sim-core project and Dockerfile setup
+SIM_WHEEL_DIR="$DIR_SIM_CORE/dist"
+WORKER_WHEEL_DIR="$DIR_WORKER/proof-sim-core/dist/"
+
+# Extract the locally jib-built image tag (proof-worker:<version>) from pom-local.xml.
+WORKER_VERSION=$(grep -A1 '<artifactId>proof-worker</artifactId>' "$DIR_WORKER/pom-local.xml" \
+    | grep '<version>' | sed -E 's/.*<version>([^<]+)<.*/\1/' | head -1 || true)
+
 # Parse command line arguments
 BUILD_WORKER=false
 BUILD_SIM_CORE=false
 BUILD_UTILS=false
-IMAGE_NAME="proof-worker-python:local"
-USE_LOCAL_WORKER=true
+IMAGE_NAME="proof-worker-python:$WORKER_VERSION"
+DOCKER_FILE="Dockerfile-worker-python"
+
+USE_LOCAL_WORKER=true       # false only when -r (remote base) is used
+BASE_IMAGE=""               # optional image (remote or local)
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -30,41 +43,61 @@ while [[ $# -gt 0 ]]; do
             IMAGE_NAME="$2"
             shift 2
             ;;
+        --base-image|-b)
+            USE_LOCAL_WORKER=true
+            if [[ $# -gt 1 && "$2" != -* ]]; then
+                BASE_IMAGE="$2"
+                shift 2
+            else
+                shift
+            fi
+            ;;
         --use-remote|-r)
             USE_LOCAL_WORKER=false
-            shift
+            if [[ $# -gt 1 && "$2" != -* ]]; then
+                BASE_IMAGE="$2"
+                shift 2
+            else
+                shift
+            fi
             ;;
         *)
             echo "Unknown option: $1"
-            echo -e "Usage: $0 [--worker|-w] [--sim-core|-s] [--utils|-u] [--image|-i IMAGE_NAME] [--use-remote|-r]"
+            echo -e "Usage: $0 [--worker|-w] [--sim-core|-s] [--utils|-u] [--image|-i IMAGE_NAME] [--base-image|-b [IMG]] [--use-remote|-r [IMG]]"
             echo -e "\nOptions:"
-            echo -e "  --worker, -w          Build image based on proof-worker changes"
-            echo -e "  --sim-core, -s        Build image based on proof-sim-core Python package changes"
-            echo -e "  --utils, -u           Build and install proof-utils before building proof-worker"
-            echo -e "  --image, -i NAME      Set final image name and tag (default: proof-worker-python:local)"
-            echo -e "  --use-remote, -r      Use remote proof-worker from iai-artifactory instead of locally built on"
+            echo -e "  --worker, -w             Build the (local) proof-worker base image from source"
+            echo -e "  --sim-core, -s           Build image based on proof-sim-core Python package changes"
+            echo -e "  --utils, -u              Build and install proof-utils before building proof-worker"
+            echo -e "  --image, -i NAME         Set final image name and tag (default: proof-worker-python:<version>)"
+            echo -e "  --base-image, -b [IMG]   Use LOCAL base image <IMG> (default: proof-worker:<version> from pom-local.xml)"
+            echo -e "  --use-remote, -r [IMG]   Use REMOTE base image ghcr.io/kit-iai-proof/<IMG> (default: proof-worker:latest)"
             exit 1
             ;;
     esac
 done
 
-# Check that at least one building option is chosen
-if [ "$BUILD_WORKER" = false ] && [ "$BUILD_SIM_CORE" = false ]; then
-    echo "ERROR: Either --worker/-w or --sim-core/-s needs to be provided!"
+# Check that at least one building (or base-image selecting) option is chosen
+BASE_IMAGE_SPECIFIED=false
+if [ -n "$BASE_IMAGE" ]; then
+    BASE_IMAGE_SPECIFIED=true
+fi
+if [ "$BUILD_WORKER" = false ] && [ "$BUILD_SIM_CORE" = false ] && [ "$BASE_IMAGE_SPECIFIED" = false ]; then
+    echo "ERROR: Either --worker/-w, --sim-core/-s, --base-image/-b, or --use-remote/-r needs to be provided!"
     exit 2
 fi
 
-# Check that --use-remote is only used with --sim-core
-if [ "$USE_LOCAL_WORKER" = false ] && [ "$BUILD_WORKER" = true ]; then
-    echo "ERROR: --use-remote/-r can only be used with --sim-core/-s, not with --worker/-w!"
-    echo "Building the worker locally (--worker/-w) while using a remote worker makes no sense."
-    exit 6
+# --worker/-w always builds its own local proof-worker image and uses it as the
+# base, so any --base-image/-b or --use-remote/-r override is meaningless here.
+if [ "$BUILD_WORKER" = true ] && { [ "$USE_LOCAL_WORKER" = false ] || [ "$BASE_IMAGE_SPECIFIED" = true ]; }; then
+    echo "NOTE: --worker/-w builds proof-worker locally and uses it as the base image;"
+    echo "      ignoring the --base-image/-b or --use-remote/-r image override."
+    USE_LOCAL_WORKER=true
+    BASE_IMAGE=""
 fi
 
 # Check if *.wheel in proof-sim-core/dist exists, else enable building proof-sim-core to build the wheels 
-WHEEL_DIR="$DIR_SIM_CORE/dist"
-if [ ! -d "$WHEEL_DIR" ]; then
-  echo -e "\n== No python wheel for proof-sim-core exist ($WHEEL_DIR does not exist). Building py wheels for proof-sim-core..."
+if [ ! -d "$WORKER_WHEEL_DIR" ]; then
+  echo -e "\n== No python wheel for proof-sim-core exists in worker directory ($WORKER_WHEEL_DIR does not exist). Building py wheels for proof-sim-core..."
   BUILD_SIM_CORE=true
 fi
 
@@ -82,10 +115,9 @@ if [ "$BUILD_SIM_CORE" = true ]; then
     cd "$DIR_SIM_CORE"
     # Enable this to remove old wheel and source distribution files automatically to ensure we only have the newly built ones in the dist directory
     # rm -f dist/*.whl dist/*.tar.gz
-    python3 -m build
-    
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to build Python package with error code '$?'"
+    if ! python3 -m build; then
+        code=$?
+        echo "ERROR: Failed to build Python package with error code '$code'"
         exit 5
     fi
 
@@ -100,35 +132,35 @@ if [ "$BUILD_SIM_CORE" = true ]; then
 
     # Empty the wheels directory to ensure only the correct wheel is present
     echo -e "\n===== Clearing wheels directory...\n"
-    rm -rf wheels/*
-    mkdir -p wheels
+    rm -rf "$WORKER_WHEEL_DIR"
+    mkdir -p "$WORKER_WHEEL_DIR"
 
     # Copy only the wheel matching the version from setup.cfg
-    echo -e "\n===== Copying wheel for version $SIM_CORE_VERSION_WHEEL from $DIR_SIM_CORE/dist to wheels directory...\n"
+    echo -e "\n===== Copying wheel for version $SIM_CORE_VERSION_WHEEL from $SIM_WHEEL_DIR to wheels directory...\n"
 
     # Find and copy the matching wheel file
     WHEEL_PATTERN="proof_sim_core-${SIM_CORE_VERSION_WHEEL}-py3-none-any.whl"
     WHEEL_COPIED=false
-    if cp "$DIR_SIM_CORE/dist/$WHEEL_PATTERN" wheels/ 2>/dev/null; then
-        echo -e "\n===== Successfully copied $WHEEL_PATTERN to wheels/\n"
+    if cp "$SIM_WHEEL_DIR/$WHEEL_PATTERN" "$WORKER_WHEEL_DIR" 2>/dev/null; then
+        echo -e "\n===== Successfully copied $WHEEL_PATTERN to $WORKER_WHEEL_DIR\n"
         WHEEL_COPIED=true
     else
         echo "WARNING: Exact wheel pattern not found. Searching for matching wheel..."
         # Try to find any wheel with the version (in case of different platform tags)
-        for whl in "$DIR_SIM_CORE/dist"/proof_sim_core-"${SIM_CORE_VERSION_WHEEL}"*.whl; do
+        for whl in "$SIM_WHEEL_DIR"/proof_sim_core-"${SIM_CORE_VERSION_WHEEL}"*.whl; do
             if [ -f "$whl" ]; then
-                cp "$whl" wheels/
-                echo -e "\n===== Copied $(basename "$whl") to wheels/\n"
+                cp "$whl" "$WORKER_WHEEL_DIR"
+                echo -e "\n===== Copied $(basename "$whl") to $WORKER_WHEEL_DIR\n"
                 WHEEL_COPIED=true
             fi
         done
     fi
 
     # Verify that at least one wheel was copied
-    if [ "$WHEEL_COPIED" = false ] || [ ! "$(ls -A wheels 2>/dev/null)" ]; then
-        echo "ERROR: No wheel files were copied to wheels/"
-        echo "Available wheels in $DIR_SIM_CORE/dist:"
-        ls -la "$DIR_SIM_CORE/dist/"*.whl 2>/dev/null || echo "No .whl files found"
+    if [ "$WHEEL_COPIED" = false ] || [ ! "$(ls -A "$WORKER_WHEEL_DIR" 2>/dev/null)" ]; then
+        echo "ERROR: No wheel files were copied to $WORKER_WHEEL_DIR"
+        echo "Available wheels in $SIM_WHEEL_DIR:"
+        ls -la "$SIM_WHEEL_DIR"*.whl 2>/dev/null || echo "No .whl files found"
         exit 9
     fi
 fi
@@ -148,10 +180,9 @@ if [ "$BUILD_WORKER" = true ]; then
         fi
         
         cd "$DIR_UTILS"
-        mvn clean install -DskipTests
-        
-        if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to install proof-utils with error code '$?'"
+        if ! mvn clean install -DskipTests; then
+            code=$?
+            echo "ERROR: Failed to install proof-utils with error code '$code'"
             exit 8
         fi
         
@@ -159,24 +190,28 @@ if [ "$BUILD_WORKER" = true ]; then
     fi
 
     echo -e "\n===== Building proof-worker image...\n"
-        
-    mvn clean compile jib:dockerBuild@deploy-regular -f pom-local.xml
 
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to build proof-worker image with error code '$?'"
+    # NOTE: `compile` is required here — invoking jib:dockerBuild@deploy-regular directly
+    # does NOT run the compile phase automatically, so we must compile fresh classes first.
+    if ! mvn clean compile jib:dockerBuild@deploy-regular -f pom-local.xml; then
+        code=$?
+        echo "ERROR: Failed to build proof-worker image with error code '$code'"
         exit 3
     fi
 fi
 
-# Determine which worker image to use
-if [ "$USE_LOCAL_WORKER" = true ]; then
-    echo -e "\n=== Using local proof-worker:local image"
-    DOCKER_FILE="Dockerfile-from-local"
+# Resolve the base worker image injected as the Dockerfile's WORKER_IMAGE arg.
+BASE_IMG_PATH=""
+if [ "$USE_LOCAL_WORKER" = "false" ]; then
+    BASE_IMG_PATH="ghcr.io/kit-iai-proof/"
+    : "${BASE_IMAGE:=proof-worker:latest}"
 else
-    echo -e "\n=== Using remote proof-worker:latest from iai-artifactory"
-    DOCKER_FILE="Dockerfile-from-remote"
+    : "${BASE_IMAGE:=proof-worker:${WORKER_VERSION}}"
 fi
+WORKER_BASE_IMAGE="$BASE_IMG_PATH$BASE_IMAGE"
+
+echo -e "\n=== Using base image: $WORKER_BASE_IMAGE"
 
 # Always execute docker build command
-echo -e "\n===== Building proof-worker-python image: $IMAGE_NAME\n"
-docker build -t "$IMAGE_NAME" -f docker/standard/$DOCKER_FILE .
+echo -e "\n===== Building image:\nproof-worker-python: '$IMAGE_NAME'\nBase image: '$WORKER_BASE_IMAGE'\nbuilt utils: '$BUILD_UTILS'\nbuilt sim-core: '$BUILD_SIM_CORE'\n"
+docker build -t "$IMAGE_NAME" --build-arg WORKER_IMAGE="$WORKER_BASE_IMAGE" -f docker/$DOCKER_FILE .

@@ -17,15 +17,19 @@ RUN find /opt/venv -type d \( -name "*.dist-info" -o -name "tests" -o -name "__p
 
 FROM ${WORKER_IMAGE}
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.12 \
+    python3.12 python3-venv python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-# Single symlink for python3
-RUN ln -s /usr/bin/python3.12 /usr/bin/python3 && ln -s /usr/bin/python3.12 /usr/bin/python
+# Real venv with pip
+RUN python3 -m venv /opt/venv
+
+# Single symlink (venv already provides python3/python/pip in /opt/venv/bin,
+# so these are only convenience fallbacks)
+RUN ln -s /usr/bin/python3.12 /usr/bin/python
 
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONPATH="/opt/venv"
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Copy site-packages from the builder stage
-COPY --from=python-builder /opt/venv /opt/venv
+# Copy site-packages from the builder stage INTO the real venv's site-packages
+COPY --from=python-builder /opt/venv /opt/venv/lib/python3.12/site-packages
