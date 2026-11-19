@@ -87,4 +87,13 @@ jobs:
           fi
 
       - name: Deploy with Jib (deploy-regular execution only)
-        run: mvn clean deploy -DskipTests ${JIB_EXTRA_TAG}
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME,,}"
+          
+          mvn clean deploy -DskipTests ${JIB_EXTRA_TAG}
+          if [[ -n "$JIB_EXTRA_TAG" ]]; then
+            echo "Deploying proof-worker-java tag as well to GHCR"
+            mvn deploy -DskipTests \
+              -Djib.to.image=ghcr.io/kit-iai-proof/proof-worker-java \
+              -Djib.to.tags="${TAG_NAME},latest"
+          fi
