@@ -38,7 +38,7 @@ public class SyncController {
     private final Workflow workflow;
 
     private StepSizeDefinitionHelper stepSizeDefinitionHelper;
-    private Integer communicationPoint = 0;
+    private volatile Integer communicationPoint = 0;
     private final double inputTimeout;
     private final double inputTimeoutMillis;
     private final long inputValueCheckCycleMillis = 250;
@@ -46,11 +46,13 @@ public class SyncController {
     private final BaseMessage baseMessage;
 
     private final SyncStrategy currentSyncStrategy;
-    private SimulationPhase currentSimulationPhase = SimulationPhase.CREATE;
-    private ModelInputInterface currentModelInputInterface;
+    private volatile SimulationPhase currentSimulationPhase = SimulationPhase.CREATE;
+    private volatile ModelInputInterface currentModelInputInterface;
+    private final Object waitLock = new Object();
+    private volatile boolean abortRequested = false;
 	private StatusHelper statusHelper;
 
-	boolean retryMessageSent = false;
+	volatile boolean retryMessageSent = false;
 
     public SyncController(
             final Block block,
@@ -97,6 +99,9 @@ public class SyncController {
 	 * @param syncMessage the SYNC message
 	 */
 	public void processStep(final SyncMessage syncMessage) {
+		if( syncMessage.getSimulationPhase() == SimulationPhase.FINALIZE || syncMessage.getSimulationPhase() == SimulationPhase.SHUTDOWN ) {
+			this.abortRequested = false;  // the running wait (if any) has already been interrupted
+		}
 		if( this.currentSimulationPhase != syncMessage.getSimulationPhase() ) {
 			this.currentSimulationPhase = syncMessage.getSimulationPhase();
 			this.currentModelInputInterface = ModelInputInterface.getModelInputInterface(this.currentSimulationPhase);
@@ -237,14 +242,23 @@ public class SyncController {
                                         + " [ms]:  " + sj.toString()
                                         + ",  elapsed time=" + elapsedTime);
                                     try {
-                                        Thread.sleep(this.inputValueCheckCycleMillis);
+                                        synchronized (this.waitLock) {
+                                            if( !this.abortRequested ) {
+                                                this.waitLock.wait(this.inputValueCheckCycleMillis);
+                                            }
+                                        }
                                     } catch (InterruptedException e) {
-                                        e.printStackTrace();
+                                        Thread.currentThread().interrupt();
                                         this.sendErrorNotifyMesssage();
                                         return;
                                     }
                                 }
-                            } while( !this.isInputTimeOutExceeded(elapsedTime) );
+                            } while( !this.abortRequested && !this.isInputTimeOutExceeded(elapsedTime) );
+
+                            if( this.abortRequested ) {
+                                LoggingHelper.info().log("Waiting for input values of block '%s' was aborted by FINALIZE/SHUTDOWN", this.block.getName());
+                                return;
+                            }
 
                             LoggingHelper.debug().log("inputTimeout of %.3f ms exceeded while waiting for " +
                                     "required values for the dynamic inputs of the block " +
@@ -363,6 +377,17 @@ public class SyncController {
                 .simulationPhase(simulationPhase)
                 .blockStatus(blockStatus)
                 .build();
+    }
+
+    /**
+     * Interrupt a currently running wait for input values (EXECUTE phase). May be called from another thread
+     * (e.g. when a FINALIZE or SHUTDOWN SYNC message arrives while a step is still waiting for values).
+     */
+    public void abortWaiting() {
+        this.abortRequested = true;
+        synchronized (this.waitLock) {
+            this.waitLock.notifyAll();
+        }
     }
 
     /**

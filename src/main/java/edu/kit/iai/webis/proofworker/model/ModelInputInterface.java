@@ -205,7 +205,6 @@ public class ModelInputInterface implements IValueOutputWrapper{
 	 * state alone. Called lazily from allNeededValuesGiven().
 	 */
 	private void updateAllNeededValuesGivenState() {
-		LoggingHelper.debug().log("Update allValuesGiven for strategy %s", this.syncStrategy);
 		switch (this.syncStrategy) {
 			case ALL_VALUES -> {
 				LoggingHelper.debug().log("Strategy '%s': allValuesGiven= (%d==%d)", this.syncStrategy, this.values.size(), this.inputNameMappings.size());
@@ -215,17 +214,17 @@ public class ModelInputInterface implements IValueOutputWrapper{
 			}
 			case WAIT_FOR_SYNC -> {
 				if( this.inputNameMappings.size() == 0 ) { // no inputs at all, e.g. a reader
-					LoggingHelper.debug().log("no mappings and values for this block");
+					LoggingHelper.debug().log("Strategy '%s': no mappings and values for this block", this.syncStrategy);
 					this.allNeededValuesGiven = true;
 				}
 				else if( this.missingRequiredInputValues.isEmpty() ) {
 					// all required inputs (if any) have values; remaining (optional) inputs may still be missing, that's fine
-					LoggingHelper.debug().log("all required inputs (%d) have values, remaining inputs (if any) are optional", this.requiredInputNameMappings.size());
+					LoggingHelper.debug().log("Strategy '%s': all required inputs (%d) have values, remaining inputs (if any) are optional", this.syncStrategy, this.requiredInputNameMappings.size());
 					this.allNeededValuesGiven = true;
 				}
 				else {
-					LoggingHelper.debug().log("requiredInputNameMappings.size() > 0 (%d) but not all req. values given, missing values: %s",
-							this.requiredInputNameMappings.size(), this.missingRequiredInputValues);
+					LoggingHelper.debug().log("Strategy '%s': requiredInputNameMappings.size() > 0 (%d) but not all required values given, missing values: %s",
+							this.syncStrategy, this.requiredInputNameMappings.size(), this.missingRequiredInputValues);
 				}
 			}
 			case INSTANT -> {
@@ -235,7 +234,7 @@ public class ModelInputInterface implements IValueOutputWrapper{
 				}
 			}
         }
-		LoggingHelper.debug().log("Set allValuesGiven to '%b'", this.allNeededValuesGiven);
+		LoggingHelper.trace().log("Set allValuesGiven to '%b'", this.allNeededValuesGiven);
 	}
 
 	public void useDefaultValues() {
